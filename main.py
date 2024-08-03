@@ -1,34 +1,15 @@
 import asyncio
-from typing import AsyncIterator, Optional, List
+from typing import AsyncIterator
 
 from pyeasee import Easee
 import argparse
 
 import pyeasee
 from pyeasee.charger import STATUS as CHARGER_STATUS, Charger
-import teslapy
-import datetime as dt
 
-from ladning.constants import BATTERY_CAPACITY_KWH, CHARGING_KW, MILES_TO_KILOMETERS
+from ladning.charging_plan import create_charging_plan
 from ladning.energy_prices import get_energy_prices
-from ladning.types import VehicleChargeState, ChargingPlan, HourlyPrice
-
-
-def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices: List[HourlyPrice],
-                         target_battery_level: int = 100) -> Optional[ChargingPlan]:
-    # Check if charging is needed at all
-    if target_battery_level <= vehicle_charge_state.battery_level:
-        return None
-
-    # Charging is needed - calculate plan
-    hours_required_to_charge_to_full = ((target_battery_level -
-                                         vehicle_charge_state.battery_level) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW
-
-    # Naive approach - start right now
-    start_time = dt.datetime.now()
-    end_time = start_time + dt.timedelta(hours=hours_required_to_charge_to_full)
-    return ChargingPlan(start_time=start_time, end_time=end_time, battery_start=vehicle_charge_state.battery_level,
-                        battery_end=100)
+from ladning.vehicle_query import get_vehicle_charge_state
 
 
 async def listen_for_charging_states(easee: Easee, charger: Charger) -> AsyncIterator[str]:
@@ -54,7 +35,7 @@ async def listen_for_charging_states(easee: Easee, charger: Charger) -> AsyncIte
         yield await queue.get()
 
 
-async def ged(easee: Easee) -> None:
+async def smart_charge(easee: Easee) -> None:
     # Find the one charger that we intend to control/listen to
     chargers = await easee.get_chargers()
     if len(chargers) != 1:
@@ -71,25 +52,6 @@ async def ged(easee: Easee) -> None:
             print("Vehicle not connected to charger - awaiting connection")
 
 
-def get_vehicle_charge_state(allow_wakeup: bool = False) -> VehicleChargeState:
-    with teslapy.Tesla('mathias.stokholm@gmail.com') as tesla:
-        vehicles = tesla.vehicle_list()
-        if len(vehicles) != 1:
-            raise RuntimeError(f"Expected a single vehicle, got {len(vehicles)}")
-        vehicle = vehicles[0]
-        if vehicle["state"] == "asleep":
-            if allow_wakeup:
-                print(f"WARNING: Waking up car to get battery level")
-                vehicle.sync_wake_up()
-            else:
-                raise RuntimeError("Car is asleep and wakeup wasn't allowed")
-        charge_state = vehicle['charge_state']
-        battery_level = charge_state['battery_level']
-        range_km = charge_state['battery_range'] * MILES_TO_KILOMETERS
-        minutes_to_full_charge = charge_state['minutes_to_full_charge']
-        return VehicleChargeState(battery_level, range_km, minutes_to_full_charge)
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--easee_username", help="The Easee username to use", required=True)
@@ -99,7 +61,7 @@ def main():
     easee = Easee(args.easee_username, args.easee_password)
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(ged(easee))
+        loop.run_until_complete(smart_charge(easee))
     except KeyboardInterrupt:
         print(f"Quitting due to keyboard interrupt")
     finally:
