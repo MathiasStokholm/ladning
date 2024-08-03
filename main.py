@@ -1,5 +1,5 @@
 import asyncio
-from typing import AsyncIterator, Optional, Dict, Any, List
+from typing import AsyncIterator, Optional, List
 
 from pyeasee import Easee
 import argparse
@@ -7,42 +7,11 @@ import argparse
 import pyeasee
 from pyeasee.charger import STATUS as CHARGER_STATUS, Charger
 import teslapy
-import dataclasses
 import datetime as dt
-import requests
 
-MILES_TO_KILOMETERS = 1.609344
-BATTERY_CAPACITY_KWH = 57.5  # Tesla Model 3 Highland RWD
-CHARGING_KW = 11.0  # Easee Lite
-
-
-@dataclasses.dataclass
-class VehicleChargeState:
-    battery_level: int
-    range_km: float
-    minutes_to_full_charge: int
-
-
-@dataclasses.dataclass
-class HourlyPrice:
-    start: dt.datetime
-    price_kwh_dkk: float
-    co2_emission: Optional[float]
-
-
-@dataclasses.dataclass
-class ChargingPlan:
-    start_time: dt.datetime
-    end_time: dt.datetime
-    battery_start: int
-    battery_end: int
-
-
-def next_datetime_at_hour(current: dt.datetime, hour: int) -> dt.datetime:
-    repl = current.replace(hour=hour, minute=0, second=0, microsecond=0)
-    while repl <= current:
-        repl = repl + dt.timedelta(days=1)
-    return repl
+from ladning.constants import BATTERY_CAPACITY_KWH, CHARGING_KW, MILES_TO_KILOMETERS
+from ladning.energy_prices import get_energy_prices
+from ladning.types import VehicleChargeState, ChargingPlan, HourlyPrice
 
 
 def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices: List[HourlyPrice],
@@ -55,55 +24,11 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
     hours_required_to_charge_to_full = ((target_battery_level -
                                          vehicle_charge_state.battery_level) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW
 
-    # Naive approach - pick cheapest hour
-    # TODO
-    start_time = next_datetime_at_hour(dt.datetime.now(), 13)
+    # Naive approach - start right now
+    start_time = dt.datetime.now()
     end_time = start_time + dt.timedelta(hours=hours_required_to_charge_to_full)
     return ChargingPlan(start_time=start_time, end_time=end_time, battery_start=vehicle_charge_state.battery_level,
                         battery_end=100)
-
-
-def get_energy_prices() -> List[HourlyPrice]:
-    price_area = "DK2"  # Price area for Sealand and Copenhagen
-    date_str = dt.datetime.now().strftime("%Y-%m-%dT%H:00")
-    url = f'https://api.energidataservice.dk/dataset/elspotprices?start={date_str}&filter={{"PriceArea":["{price_area}"]}}'
-    records = requests.get(url).json()["records"]
-
-    def _convert(record: Dict[str, Any]) -> HourlyPrice:
-        start = dt.datetime.strptime(record["HourDK"], "%Y-%m-%dT%H:%M:%S")
-        price_mwh_dkk = record["SpotPriceDKK"]
-        price_kwh_dkk = price_mwh_dkk / 1000.0
-        return HourlyPrice(start=start, price_kwh_dkk=price_kwh_dkk, co2_emission=None)
-
-    # Sort hourly prices by datetime (first entry is closest to current time)
-    hourly_prices = sorted([_convert(r) for r in records], key=lambda p: p.start)
-    return hourly_prices
-
-
-def get_energy_prices_bolius() -> List[HourlyPrice]:
-    """
-    Get the energy prices including tariffs and taxes from Bolius.
-
-    See https://www.bolius.dk/elpriser for more info.
-
-    :return: The hourly energy prices from now until the most recently published price
-    """
-    endpoint = "https://api.bolius.dk/livedata/v2/type/power"
-    price_area = "DK2"  # Price area for Sealand and Copenhagen
-    date_start_str = dt.datetime.now().strftime("%Y-%m-%dT%H:00")
-    date_end_str = next_datetime_at_hour(dt.datetime.now(), hour=0).strftime("%Y-%m-%dT%H:00")
-    url = f"{endpoint}?region={price_area}&co2=1&start={date_start_str}&end={date_end_str}"
-    records = requests.get(url).json()["data"]
-
-    def _convert(record: Dict[str, Any]) -> HourlyPrice:
-        start = dt.datetime.strptime(record["date"], "%Y-%m-%d") + dt.timedelta(hours=record["hour"])
-        price_kwh_dkk = float(record["price"])
-        co2_emission = record["co2"]["average"]
-        return HourlyPrice(start=start, price_kwh_dkk=price_kwh_dkk, co2_emission=co2_emission)
-
-    # Sort hourly prices by datetime (first entry is closest to current time)
-    hourly_prices = sorted([_convert(r) for r in records], key=lambda p: p.start)
-    return hourly_prices
 
 
 async def listen_for_charging_states(easee: Easee, charger: Charger) -> AsyncIterator[str]:
