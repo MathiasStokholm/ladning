@@ -1,0 +1,2 @@
+pyeasee==0.8.1
+teslapy==2.9.0
