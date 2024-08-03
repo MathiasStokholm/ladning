@@ -11,6 +11,9 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
     if target_battery_level <= vehicle_charge_state.battery_level:
         return None
 
+    if len(hourly_prices) == 0:
+        raise RuntimeError("Empty list of hourly prices, cannot create charging plan")
+
     # Charging is needed - calculate plan
     hours_required_to_charge_to_full = ((target_battery_level -
                                          vehicle_charge_state.battery_level) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW
