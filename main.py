@@ -45,7 +45,8 @@ async def schedule_charge(charger: Charger, charging_plan: ChargingPlan) -> None
     response = await charger.set_basic_charge_plan(id=42,  # Unsure what ID to use here
                                                    chargeStartTime=_format(charging_plan.start_time),
                                                    chargeStopTime=_format(charging_plan.end_time),
-                                                   repeat=False)
+                                                   repeat=False,
+                                                   isEnabled=True)
     if not response.ok:
         raise RuntimeError(f"Scheduling charge failed: '{response.reason}' (code {response.status})")
 
@@ -58,12 +59,13 @@ async def smart_charge(easee: Easee) -> None:
     charger = chargers[0]
 
     async for new_charging_state in listen_for_charging_states(easee, charger):
-        if new_charging_state == "AWAITING_START" or new_charging_state == "READY_TO_CHARGE":
+        if new_charging_state == "AWAITING_START" or new_charging_state == "READY_TO_CHARGE" or new_charging_state == "CHARGING":
             charge_state = get_vehicle_charge_state(allow_wakeup=True)
             hourly_prices = get_energy_prices()
             charging_plan = create_charging_plan(charge_state, hourly_prices)
             print(f"New charging plan created: {charging_plan}")
             await schedule_charge(charger, charging_plan)
+            print(f"New charging plan scheduled")
         elif new_charging_state == "DISCONNECTED":
             print("Vehicle not connected to charger - awaiting connection")
 

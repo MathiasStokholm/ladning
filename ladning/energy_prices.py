@@ -5,8 +5,8 @@ import datetime as dt
 import requests
 
 
-def next_datetime_at_hour(current: dt.datetime, hour: int) -> dt.datetime:
-    repl = current.replace(hour=hour, minute=0, second=0, microsecond=0)
+def next_datetime_at_hour(current: dt.datetime, hour: int, minutes: int = 0) -> dt.datetime:
+    repl = current.replace(hour=hour, minute=minutes, second=0, microsecond=0)
     while repl <= current:
         repl = repl + dt.timedelta(days=1)
     return repl
@@ -40,7 +40,8 @@ def get_energy_prices() -> List[HourlyPrice]:
     endpoint = "https://api.bolius.dk/livedata/v2/type/power"
     price_area = "DK2"  # Price area for Sealand and Copenhagen
     date_start_str = dt.datetime.now().strftime("%Y-%m-%dT%H:00")
-    date_end_str = next_datetime_at_hour(dt.datetime.now(), hour=0).strftime("%Y-%m-%dT%H:00")
+    date_end_str = next_datetime_at_hour(dt.datetime.now() + dt.timedelta(days=1), hour=23, minutes=59).strftime(
+        "%Y-%m-%dT%H:%M")
     url = f"{endpoint}?region={price_area}&co2=1&start={date_start_str}&end={date_end_str}"
     records = requests.get(url).json()["data"]
 
