@@ -13,6 +13,8 @@ from ladning.energy_prices import get_energy_prices
 from ladning.types import ChargingPlan
 from ladning.vehicle_query import get_vehicle_charge_state
 
+from ladning.webservice import LadningService
+
 
 async def listen_for_charging_states(easee: Easee, charger: Charger) -> AsyncIterator[Tuple[Optional[str], str]]:
     queue = asyncio.Queue()
@@ -87,9 +89,17 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--easee_username", help="The Easee username to use", required=True)
     parser.add_argument("--easee_password", help="The Easee password to use", required=True)
+    parser.add_argument("--webservice_port", help="The port to use for the webservice", default=5042)
     args = parser.parse_args()
 
+    # Connect to Easee charger and log in
     easee = Easee(args.easee_username, args.easee_password)
+
+    # Start the webservice used to query and control charging on a worker thread
+    webservice = LadningService(host="0.0.0.0", port=args.webservice_port)
+    webservice.update_electricity_prices(get_energy_prices())
+
+    # Run the main smart charging loop
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(smart_charge(easee))
@@ -97,6 +107,10 @@ def main():
         print(f"Quitting due to keyboard interrupt")
     finally:
         loop.run_until_complete(easee.close())
+
+    # Wait for webservice to close
+    webservice.stop()
+    print("Web service shut down")
 
 
 if __name__ == "__main__":
