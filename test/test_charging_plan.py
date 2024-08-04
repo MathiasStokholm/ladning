@@ -25,8 +25,11 @@ def test_create_charging_plan(vehicle_50_percent: VehicleChargeState) -> None:
     ]
     target_battery_level = 100
 
-    # Make entry number 13 cheaper and check that it gets picked as the start hour
+    # Make entries 13-16 the optimal time to charge, and check that 13 gets picked as the start time even though
+    # hours 14 and 15 are cheaper
     hourly_prices[13].price_kwh_dkk = 0.5
+    hourly_prices[14].price_kwh_dkk = 0.3
+    hourly_prices[15].price_kwh_dkk = 0.1
     charging_plan = create_charging_plan(vehicle_50_percent, hourly_prices, target_battery_level)
     assert charging_plan is not None
     assert charging_plan.start_time == hourly_prices[13].start

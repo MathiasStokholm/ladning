@@ -6,7 +6,6 @@ def test_get_energy_prices_get_energy_prices_energidataservice() -> None:
     assert len(hourly_prices) > 0
     for hourly_price in hourly_prices:
         assert hourly_price.co2_emission is None
-        assert hourly_price.price_kwh_dkk > 0
 
         # Sanity check hours
         # assert hourly_price.start

@@ -1,12 +1,10 @@
 from typing import List, Optional
 import datetime as dt
+import numpy as np
+import math
 
 from ladning.constants import BATTERY_CAPACITY_KWH, CHARGING_KW
 from ladning.types import VehicleChargeState, HourlyPrice, ChargingPlan
-
-
-def argmin(a):
-    return min(range(len(a)), key=lambda x: a[x])
 
 
 def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices: List[HourlyPrice],
@@ -22,8 +20,13 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
     hours_required_to_charge_to_full = ((target_battery_level -
                                          vehicle_charge_state.battery_level) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW
 
-    # Naive approach - start at cheapest hour
-    start_idx = argmin([p.price_kwh_dkk for p in hourly_prices])
+    # Pick cheapest consecutive hours for charging
+    prices = np.array([p.price_kwh_dkk for p in hourly_prices])
+
+    # This yields the total price for starting at time N and finishing the required M hours later
+    # Note that the array is shorter than the input array by M due to not being able to sum past the end of the array
+    total_price_per_block = np.convolve(prices, np.ones(math.ceil(hours_required_to_charge_to_full)), mode='valid')
+    start_idx = np.argmin(total_price_per_block)
     start_time = hourly_prices[start_idx].start
     end_time = start_time + dt.timedelta(hours=hours_required_to_charge_to_full)
     return ChargingPlan(start_time=start_time, end_time=end_time, battery_start=vehicle_charge_state.battery_level,
