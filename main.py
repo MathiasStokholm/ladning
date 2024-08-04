@@ -39,8 +39,8 @@ async def listen_for_charging_states(easee: Easee, charger: Charger) -> AsyncIte
 
 async def schedule_charge(charger: Charger, charging_plan: ChargingPlan) -> None:
     def _format(d: dt.datetime):
-        # TODO: Convert to UTC nicely here - required by Easee API
-        return (d - dt.timedelta(hours=2)).isoformat(timespec='milliseconds') + "Z"
+        # Convert to UTC - required by Easee API
+        return d.astimezone(dt.timezone.utc).isoformat(timespec='milliseconds').replace("+00:00", "Z")
 
     response = await charger.set_basic_charge_plan(id=42,  # Unsure what ID to use here
                                                    chargeStartTime=_format(charging_plan.start_time),

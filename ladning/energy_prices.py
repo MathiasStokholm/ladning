@@ -14,12 +14,12 @@ def next_datetime_at_hour(current: dt.datetime, hour: int, minutes: int = 0) -> 
 
 def get_energy_prices_energidataservice() -> List[HourlyPrice]:
     price_area = "DK2"  # Price area for Sealand and Copenhagen
-    date_str = dt.datetime.now().strftime("%Y-%m-%dT%H:00")
+    date_str = dt.datetime.now().astimezone().strftime("%Y-%m-%dT%H:00")
     url = f'https://api.energidataservice.dk/dataset/elspotprices?start={date_str}&filter={{"PriceArea":["{price_area}"]}}'
     records = requests.get(url).json()["records"]
 
     def _convert(record: Dict[str, Any]) -> HourlyPrice:
-        start = dt.datetime.strptime(record["HourDK"], "%Y-%m-%dT%H:%M:%S")
+        start = dt.datetime.strptime(record["HourDK"], "%Y-%m-%dT%H:%M:%S").astimezone()
         price_mwh_dkk = record["SpotPriceDKK"]
         price_kwh_dkk = price_mwh_dkk / 1000.0
         return HourlyPrice(start=start, price_kwh_dkk=price_kwh_dkk, co2_emission=None)
@@ -39,14 +39,15 @@ def get_energy_prices() -> List[HourlyPrice]:
     """
     endpoint = "https://api.bolius.dk/livedata/v2/type/power"
     price_area = "DK2"  # Price area for Sealand and Copenhagen
-    date_start_str = dt.datetime.now().strftime("%Y-%m-%dT%H:00")
-    date_end_str = next_datetime_at_hour(dt.datetime.now() + dt.timedelta(days=1), hour=23, minutes=59).strftime(
-        "%Y-%m-%dT%H:%M")
+    date_start_str = dt.datetime.now().astimezone().strftime("%Y-%m-%dT%H:00")
+    date_end_str = next_datetime_at_hour(dt.datetime.now() + dt.timedelta(days=1), hour=23,
+                                         minutes=59).astimezone().strftime("%Y-%m-%dT%H:%M")
     url = f"{endpoint}?region={price_area}&co2=1&start={date_start_str}&end={date_end_str}"
     records = requests.get(url).json()["data"]
 
     def _convert(record: Dict[str, Any]) -> HourlyPrice:
-        start = dt.datetime.strptime(record["date"], "%Y-%m-%d") + dt.timedelta(hours=record["hour"])
+        start = (dt.datetime.strptime(record["date"], "%Y-%m-%d") +
+                 dt.timedelta(hours=record["hour"])).astimezone()
         price_kwh_dkk = float(record["price"])
         co2_emission = record["co2"]["average"]
         return HourlyPrice(start=start, price_kwh_dkk=price_kwh_dkk, co2_emission=co2_emission)
