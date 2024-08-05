@@ -3,13 +3,35 @@ from typing import List
 import pytest
 import datetime as dt
 
-from ladning.charging_plan import create_charging_plan
+from ladning.charging_plan import create_charging_plan, argmin, sum_n_sequential
 from ladning.types import VehicleChargeState, HourlyPrice
 
 
 @pytest.fixture()
 def vehicle_50_percent() -> VehicleChargeState:
     return VehicleChargeState(battery_level=50, range_km=200, minutes_to_full_charge=0)
+
+
+def test_argmin() -> None:
+    vals = [i for i in range(10)]
+    for i in range(10):
+        vals[i] = -i
+        assert argmin(vals) == i
+
+
+def test_sum_n_sequential() -> None:
+    def sum_0_to_n(_n: int) -> int:
+        # Use triangular number formula to get sum of numbers from 0 to n
+        return _n * (_n + 1) // 2
+
+    num_values = 20
+    vals = [i for i in range(num_values)]
+    for n in range(1, 10):
+        results = sum_n_sequential(vals, n)
+        assert len(results) == num_values - n
+        for i, result in enumerate(results):
+            expected_val = sum_0_to_n(i - 1 + n) - sum_0_to_n(i - 1)
+            assert result == expected_val
 
 
 def test_create_charging_plan_no_hours(vehicle_50_percent: VehicleChargeState) -> None:

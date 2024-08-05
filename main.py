@@ -85,7 +85,7 @@ async def smart_charge(easee: Easee) -> None:
                 print(f"New charging plan scheduled")
 
 
-def main():
+async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--easee_username", help="The Easee username to use", required=True)
     parser.add_argument("--easee_password", help="The Easee password to use", required=True)
@@ -100,18 +100,19 @@ def main():
     webservice.update_electricity_prices(get_energy_prices())
 
     # Run the main smart charging loop
-    loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(smart_charge(easee))
-    except KeyboardInterrupt:
-        print(f"Quitting due to keyboard interrupt")
+        await smart_charge(easee)
+    except:
+        print(f"Quitting due to keyboard interrupt or error")
+        raise
     finally:
-        loop.run_until_complete(easee.close())
-
-    # Wait for webservice to close
-    webservice.stop()
-    print("Web service shut down")
+        await easee.close()
+        webservice.stop()
+        print("Web service shut down")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
