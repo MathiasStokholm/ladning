@@ -1,5 +1,4 @@
 pyeasee==0.8.1
 teslapy==2.9.0
-numpy==2.0.1
 flask==3.0.3
 waitress==3.0.0
