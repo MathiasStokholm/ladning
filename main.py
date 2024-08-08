@@ -13,6 +13,7 @@ from pyeasee.charger import STATUS as CHARGER_STATUS, Charger
 
 from ladning.charging_plan import create_charging_plan
 from ladning.energy_prices import get_energy_prices
+from ladning.logging import log
 from ladning.types import ChargingPlan, HourlyPrice, VehicleChargeState
 from ladning.vehicle_query import get_vehicle_charge_state
 
@@ -42,7 +43,7 @@ class ApplicationState:
     async def smart_charge(self) -> None:
         async for previous_state, new_state in listen_for_charging_states(self._easee, await self.get_charger()):
             if new_state == "DISCONNECTED":
-                print("Vehicle not connected to charger - awaiting connection")
+                log.info("Vehicle not connected to charger - awaiting connection")
                 continue
 
             # If previous state was None (app just started) or disconnected, consider whether to perform planning
@@ -58,29 +59,29 @@ class ApplicationState:
 
     async def plan_charging(self):
         if self._vehicle_charge_state is None:
-            print("Skipping planning due to no vehicle charge state information")
+            log.info("Skipping planning due to no vehicle charge state information")
             return
 
         new_charging_plan = create_charging_plan(self._vehicle_charge_state, self._hourly_prices)
         if new_charging_plan == self._charging_plan:
-            print("Charging plan unchanged")
+            log.info("Charging plan unchanged")
             return
 
         if new_charging_plan is None:
-            print(f"Car already at target battery level, no plan will be scheduled")
+            log.info(f"Car already at target battery level, no plan will be scheduled")
         else:
             await schedule_charge(await self.get_charger(), self._charging_plan)
-            print(f"New charging plan scheduled: {self._charging_plan}")
+            log.info(f"New charging plan scheduled: {self._charging_plan}")
         self._charging_plan = new_charging_plan
 
     async def on_new_hourly_prices(self, hourly_prices: List[HourlyPrice]) -> None:
-        print("New hourly prices received")
+        log.info("New hourly prices received")
         if hourly_prices == self._hourly_prices:
-            print("New hourly prices were unchanged, skipping handling")
+            log.info("New hourly prices were unchanged, skipping handling")
             return
 
-        print(f"New hourly prices: {hourly_prices}")
-        print("Checking if charging plan should be revised")
+        log.info(f"New hourly prices: {hourly_prices}")
+        log.info("Checking if charging plan should be revised")
         self._hourly_prices = hourly_prices
         await self.plan_charging()
 
@@ -90,7 +91,7 @@ async def listen_for_charging_states(easee: Easee, charger: Charger) -> AsyncIte
 
     # Query the current charger mode
     current_charging_state: str = (await charger.get_state())["chargerOpMode"]
-    print(f"Initial charging state: {current_charging_state}")
+    log.info(f"Initial charging state: {current_charging_state}")
     yield None, current_charging_state
 
     async def _signalr_callback(_, __, data_id, value):
@@ -99,7 +100,7 @@ async def listen_for_charging_states(easee: Easee, charger: Charger) -> AsyncIte
 
             nonlocal current_charging_state
             if new_charging_state != current_charging_state:
-                print(f"New charging state: {new_charging_state}")
+                log.info(f"New charging state: {new_charging_state}")
                 await queue.put((current_charging_state, new_charging_state))
                 current_charging_state = new_charging_state
 
@@ -151,12 +152,12 @@ async def main():
     try:
         await state.smart_charge()
     except:
-        print(f"Quitting due to keyboard interrupt or error")
+        log.warning(f"Quitting due to keyboard interrupt or error")
         raise
     finally:
         await easee.close()
         webservice.stop()
-        print("Web service shut down")
+        log.info("Web service shut down")
 
 
 if __name__ == "__main__":

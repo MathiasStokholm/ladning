@@ -4,6 +4,7 @@ from typing import List, Callable
 from flask import Flask, jsonify
 import waitress
 
+from ladning.logging import log
 from ladning.types import HourlyPrice
 from dataclasses import asdict
 
@@ -17,7 +18,7 @@ class LadningService:
         self._server = waitress.create_server(self._service, host=host, port=port, threads=1)
         self._server_thread = threading.Thread(target=self._server.run, name="server_thread", daemon=True)
         self._server_thread.start()
-        print(f"Started webservice at http://{self._server.effective_host}:{self._server.effective_port}")
+        log.info(f"Started webservice at http://{self._server.effective_host}:{self._server.effective_port}")
 
     def stop(self) -> None:
         self._server.close()

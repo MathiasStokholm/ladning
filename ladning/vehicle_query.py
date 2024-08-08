@@ -1,6 +1,7 @@
 import teslapy
 
 from ladning.constants import MILES_TO_KILOMETERS
+from ladning.logging import log
 from ladning.types import VehicleChargeState
 
 
@@ -12,7 +13,7 @@ def get_vehicle_charge_state(allow_wakeup: bool = False) -> VehicleChargeState:
         vehicle = vehicles[0]
         if vehicle["state"] == "asleep":
             if allow_wakeup:
-                print(f"WARNING: Waking up car to get battery level")
+                log.warning(f"Waking up car to get battery level")
                 vehicle.sync_wake_up()
             else:
                 raise RuntimeError("Car is asleep and wakeup wasn't allowed")
