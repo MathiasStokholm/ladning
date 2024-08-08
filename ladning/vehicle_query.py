@@ -5,8 +5,8 @@ from ladning.logging import log
 from ladning.types import VehicleChargeState
 
 
-def get_vehicle_charge_state(allow_wakeup: bool = False) -> VehicleChargeState:
-    with teslapy.Tesla('mathias.stokholm@gmail.com') as tesla:
+def get_vehicle_charge_state(tesla_username: str, allow_wakeup: bool = False) -> VehicleChargeState:
+    with teslapy.Tesla(tesla_username) as tesla:
         vehicles = tesla.vehicle_list()
         if len(vehicles) != 1:
             raise RuntimeError(f"Expected a single vehicle, got {len(vehicles)}")

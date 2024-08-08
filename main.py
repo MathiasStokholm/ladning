@@ -21,8 +21,9 @@ from ladning.webservice import LadningService
 
 
 class ApplicationState:
-    def __init__(self, easee: Easee, hourly_prices: List[HourlyPrice]) -> None:
+    def __init__(self, easee: Easee, tesla_username: str, hourly_prices: List[HourlyPrice]) -> None:
         self._easee = easee
+        self._tesla_username = tesla_username
         self._hourly_prices = hourly_prices
         self._vehicle_charge_state: Optional[VehicleChargeState] = None
         self._charging_plan: Optional[ChargingPlan] = None
@@ -54,7 +55,7 @@ class ApplicationState:
                                    new_state == "CHARGING"
 
                 if perform_planning:
-                    self._vehicle_charge_state = get_vehicle_charge_state(allow_wakeup=True)
+                    self._vehicle_charge_state = get_vehicle_charge_state(self._tesla_username, allow_wakeup=True)
                     await self.plan_charging()
 
     async def plan_charging(self):
@@ -125,6 +126,7 @@ async def schedule_charge(charger: Charger, charging_plan: ChargingPlan) -> None
 
 async def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--tesla_username", help="The Tesla username to use", required=True)
     parser.add_argument("--easee_username", help="The Easee username to use", required=True)
     parser.add_argument("--easee_password", help="The Easee password to use", required=True)
     parser.add_argument("--webservice_port", help="The port to use for the webservice", default=5042)
@@ -134,7 +136,7 @@ async def main():
     easee = Easee(args.easee_username, args.easee_password)
 
     # Create application state to tie together different pieces of the app
-    state = ApplicationState(easee, get_energy_prices())
+    state = ApplicationState(easee, args.tesla_username, get_energy_prices())
 
     # Start the webservice used to query and control charging on a worker thread
     webservice = LadningService(host="0.0.0.0", port=args.webservice_port,
