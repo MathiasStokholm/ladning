@@ -45,11 +45,14 @@ class ApplicationState:
     async def smart_charge(self) -> None:
         async for previous_state, new_state in listen_for_charging_states(self._easee, await self.get_charger()):
             if new_state == "DISCONNECTED":
-                log.info("Vehicle not connected to charger - awaiting connection")
+                # If vehicle was disconnected, cancel any existing charging plan
+                log.info("Vehicle disconnected - cancelling charging plan")
+                await self.cancel_charging()
                 continue
 
             # If previous state was None (app just started) or disconnected, consider whether to perform planning
-            if previous_state is None or previous_state == "DISCONNECTED":
+            app_just_launched = previous_state is None
+            if app_just_launched or previous_state == "DISCONNECTED":
                 # Plan if charger is ready to charge, awaiting a schedule or already started charging
                 perform_planning = new_state == "READY_TO_CHARGE" or \
                                    new_state == "AWAITING_START" or \
@@ -76,6 +79,19 @@ class ApplicationState:
         else:
             await schedule_charge(await self.get_charger(), self._charging_plan)
             log.info(f"New charging plan scheduled: {self._charging_plan}")
+
+    async def cancel_charging(self) -> None:
+        """
+        Cancel any existing charging plan
+        """
+        charger = await self.get_charger()
+        previous_plan = await charger.get_basic_charge_plan()
+        if previous_plan is None:
+            log.info("No plan to cancel")
+        else:
+            await charger.delete_basic_charge_plan()
+            log.info("Charging plan cancelled")
+        self._charging_plan = None
 
     async def on_new_hourly_prices(self, hourly_prices: List[HourlyPrice]) -> None:
         log.info("New hourly prices received")
