@@ -79,7 +79,7 @@ class ApplicationState:
             return ChargingRequestResponse(False, "Charging plan unchanged")
 
         # Put new charging plan into effect
-        if self._charging_plan is None:
+        if new_charging_plan is None:
             log.info("Car already at target battery level, no plan will be scheduled")
             return ChargingRequestResponse(False, "Car already at target battery level, no plan will be scheduled")
         else:
