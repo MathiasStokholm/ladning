@@ -163,12 +163,17 @@ async def main():
     webservice = LadningService(host="0.0.0.0", port=args.webservice_port,
                                 electricity_price_getter=state.get_hourly_prices)
 
+    # Create a scheduler that will query new energy prices every day at 13:00 local time
     scheduler = AsyncIOScheduler()
 
-    async def _update_prices():
-        await state.on_new_hourly_prices(get_energy_prices())
+    async def _try_update_prices():
+        try:
+            prices = get_energy_prices()
+            await state.on_new_hourly_prices(prices)
+        except Exception as e:
+            log.error(f"Error while loading new energy prices: '{e}'")
 
-    scheduler.add_job(_update_prices, CronTrigger(hour=13, timezone=dt.datetime.now().astimezone().tzinfo))
+    scheduler.add_job(_try_update_prices, CronTrigger(hour=13, timezone=dt.datetime.now().astimezone().tzinfo))
     scheduler.start()
 
     # Run the main smart charging loop
