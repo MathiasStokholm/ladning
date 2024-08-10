@@ -22,6 +22,8 @@ from ladning.webservice import LadningService
 
 
 class ApplicationState:
+    DEFAULT_CHARGING_REQUEST = ChargingRequest(battery_target=100, ready_by=None)
+
     def __init__(self, easee: Easee, tesla: teslapy.Tesla, hourly_prices: List[HourlyPrice]) -> None:
         self._easee = easee
         self._tesla = tesla
@@ -30,7 +32,7 @@ class ApplicationState:
         self._charging_plan: Optional[ChargingPlan] = None
         self._charger: Optional[Charger] = None
         self._event_loop = asyncio.get_running_loop()
-        self._target_battery_level: int = 100  # Default to full battery
+        self._charging_request: ChargingRequest = ApplicationState.DEFAULT_CHARGING_REQUEST
 
     async def get_charger(self) -> Charger:
         if self._charger is None:
@@ -72,21 +74,22 @@ class ApplicationState:
             log.info("Skipping planning due to no vehicle charge state information")
             return ChargingRequestResponse(False, "Skipping planning due to no vehicle charge state information")
 
-        new_charging_plan = create_charging_plan(self._vehicle_charge_state, self._hourly_prices,
-                                                 self._target_battery_level)
+        result = create_charging_plan(self._vehicle_charge_state, self._hourly_prices,
+                                      self._charging_request)
+        if not result.success:
+            log.info(f"Charging plan unsuccessful: {result.reason}")
+            return result
+
+        new_charging_plan = result.plan
         if new_charging_plan == self._charging_plan:
             log.info("Charging plan unchanged")
-            return ChargingRequestResponse(False, "Charging plan unchanged")
+            return ChargingRequestResponse(False, "Charging plan unchanged", None)
 
         # Put new charging plan into effect
-        if new_charging_plan is None:
-            log.info("Car already at target battery level, no plan will be scheduled")
-            return ChargingRequestResponse(False, "Car already at target battery level, no plan will be scheduled")
-        else:
-            await schedule_charge(await self.get_charger(), new_charging_plan)
-            log.info(f"New charging plan scheduled: {new_charging_plan}")
+        await schedule_charge(await self.get_charger(), new_charging_plan)
+        log.info(f"New charging plan scheduled: {new_charging_plan}")
         self._charging_plan = new_charging_plan
-        return ChargingRequestResponse(True, "Success")
+        return result
 
     async def cancel_charging(self) -> None:
         """
@@ -117,13 +120,12 @@ class ApplicationState:
         if request.battery_target <= 0 or request.battery_target > 100:
             return ChargingRequestResponse(False, "Target battery level outside valid range")
 
-        # TODO: Take request.ready_by into account for planning
-        self._target_battery_level = request.battery_target
+        self._charging_request = request
         result = await self.plan_charging()
 
-        # On failure, revert to default charging limit
+        # On failure, revert to default charging request
         if not result.success:
-            self._target_battery_level = 100
+            self._charging_request = ApplicationState.DEFAULT_CHARGING_REQUEST
         return result
 
     def on_charging_request_sync(self, request: ChargingRequest) -> ChargingRequestResponse:

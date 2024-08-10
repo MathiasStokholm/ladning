@@ -61,11 +61,13 @@ def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Hour
     charging request
     """
 
-    def success(_: ChargingRequest) -> ChargingRequestResponse:
-        return ChargingRequestResponse(success=True, reason="")
+    def success(req: ChargingRequest) -> ChargingRequestResponse:
+        return ChargingRequestResponse(success=True, reason="",
+                                       plan=ChargingPlan(dt.datetime.now(), dt.datetime.now() + dt.timedelta(hours=5),
+                                                         battery_start=50, battery_end=req.battery_target))
 
     def failure(_: ChargingRequest) -> ChargingRequestResponse:
-        return ChargingRequestResponse(success=False, reason="It failed!")
+        return ChargingRequestResponse(success=False, reason="It failed!", plan=None)
 
     request_data = dict(battery_target=100, ready_by=(dt.datetime.now() + dt.timedelta(hours=5)).isoformat())
     headers = {'Content-type': 'application/json'}
@@ -79,6 +81,7 @@ def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Hour
         results = resp.json()
         assert results["success"] is True
         assert results["reason"] == ""
+        assert results["plan"] is not None
 
     # Test failure
     with LadningService(host=HOST_ADDRESS, port=FREE_PORT, electricity_price_getter=hourly_price_getter,
@@ -89,3 +92,4 @@ def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Hour
         results = resp.json()
         assert results["success"] is False
         assert results["reason"] == "It failed!"
+        assert results["plan"] is None

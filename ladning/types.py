@@ -35,3 +35,4 @@ class ChargingRequest:
 class ChargingRequestResponse:
     success: bool  # Whether the charging request could be honored
     reason: str  # Reason that the charging request could not be honored (empty on success)
+    plan: Optional[ChargingPlan]  # The created charging plan (None if not successful)
