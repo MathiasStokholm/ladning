@@ -4,6 +4,7 @@ import datetime as dt
 
 from pyeasee import Easee
 import argparse
+import teslapy
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -21,9 +22,9 @@ from ladning.webservice import LadningService
 
 
 class ApplicationState:
-    def __init__(self, easee: Easee, tesla_username: str, hourly_prices: List[HourlyPrice]) -> None:
+    def __init__(self, easee: Easee, tesla: teslapy.Tesla, hourly_prices: List[HourlyPrice]) -> None:
         self._easee = easee
-        self._tesla_username = tesla_username
+        self._tesla = tesla
         self._hourly_prices = hourly_prices
         self._vehicle_charge_state: Optional[VehicleChargeState] = None
         self._charging_plan: Optional[ChargingPlan] = None
@@ -55,7 +56,7 @@ class ApplicationState:
                                    new_state == "CHARGING"
 
                 if perform_planning:
-                    self._vehicle_charge_state = get_vehicle_charge_state(self._tesla_username, allow_wakeup=True)
+                    self._vehicle_charge_state = get_vehicle_charge_state(self._tesla, allow_wakeup=True)
                     await self.plan_charging()
 
     async def plan_charging(self):
@@ -136,8 +137,11 @@ async def main():
     # Connect to Easee charger and log in
     easee = Easee(args.easee_username, args.easee_password)
 
+    # Connect to Tesla API
+    tesla = teslapy.Tesla(args.tesla_username)
+
     # Create application state to tie together different pieces of the app
-    state = ApplicationState(easee, args.tesla_username, get_energy_prices())
+    state = ApplicationState(easee, tesla, get_energy_prices())
 
     # Start the webservice used to query and control charging on a worker thread
     webservice = LadningService(host="0.0.0.0", port=args.webservice_port,
@@ -158,7 +162,9 @@ async def main():
         log.warning(f"Quitting due to keyboard interrupt or error")
         raise
     finally:
+        # Clean up
         await easee.close()
+        tesla.close()
         webservice.stop()
         log.info("Web service shut down")
 
