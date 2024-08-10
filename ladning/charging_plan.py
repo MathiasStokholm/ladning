@@ -30,13 +30,21 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
     hours_required_to_charge_to_full = ((charging_request.battery_target -
                                          vehicle_charge_state.battery_level) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW
 
+    # Disregard hourly prices later than the charging request's end time if applicable
+    hourly_prices_valid = hourly_prices if charging_request.ready_by is None \
+        else [p for p in hourly_prices if p.start + dt.timedelta(hours=1) <= charging_request.ready_by]
+
+    # Check if a sufficient amount of hours exists for the ready by time to be honored
+    if len(hourly_prices_valid) < math.ceil(hours_required_to_charge_to_full):
+        return ChargingRequestResponse(False, reason="Not enough time to charge to the requested level", plan=None)
+
     # Pick cheapest consecutive hours for charging
     # This yields the total price for starting at time N and finishing the required M hours later
     # Note that the array is shorter than the input array by M due to not being able to sum past the end of the array
-    total_price_per_block = sum_n_sequential([p.price_kwh_dkk for p in hourly_prices],
+    total_price_per_block = sum_n_sequential([p.price_kwh_dkk for p in hourly_prices_valid],
                                              n=math.ceil(hours_required_to_charge_to_full))
     start_idx = argmin(total_price_per_block)
-    start_time = hourly_prices[start_idx].start
+    start_time = hourly_prices_valid[start_idx].start
     end_time = start_time + dt.timedelta(hours=hours_required_to_charge_to_full)
     return ChargingRequestResponse(success=True, reason="",
                                    plan=ChargingPlan(start_time=start_time, end_time=end_time,
