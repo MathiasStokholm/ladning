@@ -12,23 +12,6 @@ def next_datetime_at_hour(current: dt.datetime, hour: int, minutes: int = 0) -> 
     return repl
 
 
-def get_energy_prices_energidataservice() -> List[HourlyPrice]:
-    price_area = "DK2"  # Price area for Sealand and Copenhagen
-    date_str = dt.datetime.now().astimezone().strftime("%Y-%m-%dT%H:00")
-    url = f'https://api.energidataservice.dk/dataset/elspotprices?start={date_str}&filter={{"PriceArea":["{price_area}"]}}'
-    records = requests.get(url).json()["records"]
-
-    def _convert(record: Dict[str, Any]) -> HourlyPrice:
-        start = dt.datetime.strptime(record["HourDK"], "%Y-%m-%dT%H:%M:%S").astimezone()
-        price_mwh_dkk = record["SpotPriceDKK"]
-        price_kwh_dkk = price_mwh_dkk / 1000.0
-        return HourlyPrice(start=start, price_kwh_dkk=price_kwh_dkk, co2_emission=None)
-
-    # Sort hourly prices by datetime (first entry is closest to current time)
-    hourly_prices = sorted([_convert(r) for r in records], key=lambda p: p.start)
-    return hourly_prices
-
-
 def get_energy_prices() -> List[HourlyPrice]:
     """
     Get the energy prices including tariffs and taxes from Bolius.
