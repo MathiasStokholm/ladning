@@ -11,7 +11,7 @@ def get_vehicle_charge_state(tesla_username: str, allow_wakeup: bool = False) ->
         if len(vehicles) != 1:
             raise RuntimeError(f"Expected a single vehicle, got {len(vehicles)}")
         vehicle = vehicles[0]
-        if vehicle["state"] == "asleep":
+        if vehicle["state"] == "asleep" or vehicle["state"] == "offline":
             if allow_wakeup:
                 log.warning(f"Waking up car to get battery level")
                 vehicle.sync_wake_up()

@@ -68,12 +68,13 @@ class ApplicationState:
             log.info("Charging plan unchanged")
             return
 
-        if new_charging_plan is None:
+        # Put new charging plan into effect
+        self._charging_plan = new_charging_plan
+        if self._charging_plan is None:
             log.info(f"Car already at target battery level, no plan will be scheduled")
         else:
             await schedule_charge(await self.get_charger(), self._charging_plan)
             log.info(f"New charging plan scheduled: {self._charging_plan}")
-        self._charging_plan = new_charging_plan
 
     async def on_new_hourly_prices(self, hourly_prices: List[HourlyPrice]) -> None:
         log.info("New hourly prices received")
