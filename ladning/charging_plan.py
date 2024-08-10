@@ -14,7 +14,7 @@ def sum_n_sequential(values: List[float], n: int) -> List[float]:
     num_values = len(values)
     if n >= num_values:
         raise RuntimeError(f"Too few entries to compute sum: {num_values} < {n}")
-    return [sum(values[i:i + n]) for i in range(len(values) - n)]
+    return [sum(values[i:i + n]) for i in range(len(values) - n + 1)]
 
 
 def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices: List[HourlyPrice],

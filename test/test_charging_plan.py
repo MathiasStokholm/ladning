@@ -28,10 +28,19 @@ def test_sum_n_sequential() -> None:
     vals = [i for i in range(num_values)]
     for n in range(1, 10):
         results = sum_n_sequential(vals, n)
-        assert len(results) == num_values - n
+        assert len(results) == num_values - n + 1
         for i, result in enumerate(results):
             expected_val = sum_0_to_n(i - 1 + n) - sum_0_to_n(i - 1)
             assert result == expected_val
+
+
+def test_sum_n_sequential_1() -> None:
+    """
+    Test that the sum_n_sequential function correctly returns the input when called with n=1
+    """
+    vals = [i for i in range(5)]
+    results = sum_n_sequential(vals, n=1)
+    assert results == vals
 
 
 def test_create_charging_plan_no_hours(vehicle_50_percent: VehicleChargeState) -> None:
