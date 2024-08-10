@@ -57,9 +57,15 @@ class LadningService:
 
     def charging_request(self) -> Response:
         # Convert POST data to Python dataclass
-        data = request.json
-        charging_request = ChargingRequest(battery_target=int(data["battery_target"]),
-                                           ready_by=dt.datetime.fromisoformat(data["ready_by"]))
+        try:
+            data = request.json
+            ready_by = dt.datetime.fromisoformat(data["ready_by"])
+            if ready_by.tzinfo is None:
+                return Response("ready_by datetime must have timezone information")
+            charging_request = ChargingRequest(battery_target=int(data["battery_target"]),
+                                               ready_by=ready_by)
+        except ValueError as e:
+            return Response(f"Unable to parse request parameters: '{e}'", 400)
 
         # Call setter and return result
         response = self._charging_request_setter(charging_request)

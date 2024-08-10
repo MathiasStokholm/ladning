@@ -55,6 +55,7 @@ class ApplicationState:
                 # If vehicle was disconnected, cancel any existing charging plan
                 log.info("Vehicle disconnected - cancelling charging plan")
                 await self.cancel_charging()
+                self._vehicle_charge_state = None
                 continue
 
             # If previous state was None (app just started) or disconnected, consider whether to perform planning
@@ -72,7 +73,7 @@ class ApplicationState:
     async def plan_charging(self) -> ChargingRequestResponse:
         if self._vehicle_charge_state is None:
             log.info("Skipping planning due to no vehicle charge state information")
-            return ChargingRequestResponse(False, "Skipping planning due to no vehicle charge state information")
+            return ChargingRequestResponse(False, "Skipping planning due to no vehicle charge state information", None)
 
         result = create_charging_plan(self._vehicle_charge_state, self._hourly_prices,
                                       self._charging_request)

@@ -18,8 +18,8 @@ HOST_ADDRESS = "127.0.0.1"  # This has to be an IPv4 address for webservice to n
 def hourly_price_getter() -> Callable[[], List[HourlyPrice]]:
     def _func():
         return [
-            HourlyPrice(dt.datetime.now(), 1.32, 50),
-            HourlyPrice(dt.datetime.now() + dt.timedelta(hours=1), 2.5, None),
+            HourlyPrice(dt.datetime.now().astimezone(), 1.32, 50),
+            HourlyPrice(dt.datetime.now().astimezone() + dt.timedelta(hours=1), 2.5, None),
         ]
 
     return _func
@@ -27,7 +27,8 @@ def hourly_price_getter() -> Callable[[], List[HourlyPrice]]:
 
 @pytest.fixture
 def charging_plan_getter() -> Callable[[], Optional[ChargingPlan]]:
-    return lambda: ChargingPlan(dt.datetime.now(), dt.datetime.now() + dt.timedelta(hours=1), 90, 100)
+    return lambda: ChargingPlan(dt.datetime.now().astimezone(), dt.datetime.now().astimezone() + dt.timedelta(hours=1),
+                                90, 100)
 
 
 @pytest.fixture()
@@ -63,13 +64,15 @@ def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Hour
 
     def success(req: ChargingRequest) -> ChargingRequestResponse:
         return ChargingRequestResponse(success=True, reason="",
-                                       plan=ChargingPlan(dt.datetime.now(), dt.datetime.now() + dt.timedelta(hours=5),
+                                       plan=ChargingPlan(dt.datetime.now().astimezone(),
+                                                         dt.datetime.now().astimezone() + dt.timedelta(hours=5),
                                                          battery_start=50, battery_end=req.battery_target))
 
     def failure(_: ChargingRequest) -> ChargingRequestResponse:
         return ChargingRequestResponse(success=False, reason="It failed!", plan=None)
 
-    request_data = dict(battery_target=100, ready_by=(dt.datetime.now() + dt.timedelta(hours=5)).isoformat())
+    request_data = dict(battery_target=100,
+                        ready_by=(dt.datetime.now().astimezone() + dt.timedelta(hours=5)).isoformat())
     headers = {'Content-type': 'application/json'}
 
     # Test success
