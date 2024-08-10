@@ -75,6 +75,12 @@ class ApplicationState:
             log.info("Skipping planning due to no vehicle charge state information")
             return ChargingRequestResponse(False, "Skipping planning due to no vehicle charge state information", None)
 
+        # Check if charging request is old and needs to be reset
+        if self._charging_request.ready_by is not None:
+            if self._charging_request.ready_by < dt.datetime.now().astimezone():
+                log.info(f"Resetting old charging request")
+                self._charging_request = ApplicationState.DEFAULT_CHARGING_REQUEST
+
         result = create_charging_plan(self._vehicle_charge_state, self._hourly_prices,
                                       self._charging_request)
         if not result.success:
@@ -104,6 +110,10 @@ class ApplicationState:
             await charger.delete_basic_charge_plan()
             log.info("Charging plan cancelled")
         self._charging_plan = None
+
+        # Reset charging request
+        log.info(f"Resetting charging request due to cancelled charging")
+        self._charging_request = ApplicationState.DEFAULT_CHARGING_REQUEST
 
     async def on_new_hourly_prices(self, hourly_prices: List[HourlyPrice]) -> None:
         log.info("New hourly prices received")
