@@ -11,6 +11,7 @@ from ladning.webservice import LadningService
 
 # Use any free port for web services
 FREE_PORT = 0
+HOST_ADDRESS = "127.0.0.1"  # This has to be an IPv4 address for webservice to not break
 
 
 @pytest.fixture
@@ -41,7 +42,7 @@ def test_webservice_query(hourly_price_getter: Callable[[], List[HourlyPrice]],
     Test that the "/electricity" API endpoint can be queried with HTTP GET and that it returns a charging plan and
     hourly pries
     """
-    with LadningService(host="localhost", port=FREE_PORT, electricity_price_getter=hourly_price_getter,
+    with LadningService(host=HOST_ADDRESS, port=FREE_PORT, electricity_price_getter=hourly_price_getter,
                         charging_plan_getter=charging_plan_getter,
                         charging_request_setter=charging_request_setter) as service:
         url = f"{service.endpoint}/electricity"
@@ -70,7 +71,7 @@ def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Hour
     headers = {'Content-type': 'application/json'}
 
     # Test success
-    with LadningService(host="localhost", port=FREE_PORT, electricity_price_getter=hourly_price_getter,
+    with LadningService(host=HOST_ADDRESS, port=FREE_PORT, electricity_price_getter=hourly_price_getter,
                         charging_plan_getter=charging_plan_getter, charging_request_setter=success) as service:
         url = f"{service.endpoint}/charging_request"
         resp = requests.post(url, json=request_data, headers=headers)
@@ -80,7 +81,7 @@ def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Hour
         assert results["reason"] == ""
 
     # Test failure
-    with LadningService(host="localhost", port=FREE_PORT, electricity_price_getter=hourly_price_getter,
+    with LadningService(host=HOST_ADDRESS, port=FREE_PORT, electricity_price_getter=hourly_price_getter,
                         charging_plan_getter=charging_plan_getter, charging_request_setter=failure) as service:
         url = f"{service.endpoint}/charging_request"
         resp = requests.post(url, json=request_data, headers=headers)
