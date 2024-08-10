@@ -42,6 +42,9 @@ class ApplicationState:
     def get_hourly_prices(self) -> List[HourlyPrice]:
         return self._hourly_prices
 
+    def get_charging_plan(self) -> Optional[ChargingPlan]:
+        return self._charging_plan
+
     async def smart_charge(self) -> None:
         async for previous_state, new_state in listen_for_charging_states(self._easee, await self.get_charger()):
             if new_state == "DISCONNECTED":
@@ -73,12 +76,12 @@ class ApplicationState:
             return
 
         # Put new charging plan into effect
-        self._charging_plan = new_charging_plan
         if self._charging_plan is None:
             log.info(f"Car already at target battery level, no plan will be scheduled")
         else:
-            await schedule_charge(await self.get_charger(), self._charging_plan)
-            log.info(f"New charging plan scheduled: {self._charging_plan}")
+            await schedule_charge(await self.get_charger(), new_charging_plan)
+            log.info(f"New charging plan scheduled: {new_charging_plan}")
+        self._charging_plan = new_charging_plan
 
     async def cancel_charging(self) -> None:
         """
@@ -161,7 +164,9 @@ async def main():
 
     # Start the webservice used to query and control charging on a worker thread
     webservice = LadningService(host="0.0.0.0", port=args.webservice_port,
-                                electricity_price_getter=state.get_hourly_prices)
+                                electricity_price_getter=state.get_hourly_prices,
+                                charging_plan_getter=state.get_charging_plan)
+    webservice.start()
 
     # Create a scheduler that will query new energy prices every day at 13:00 local time
     scheduler = AsyncIOScheduler()
