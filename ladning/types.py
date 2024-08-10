@@ -23,3 +23,15 @@ class ChargingPlan:
     end_time: dt.datetime
     battery_start: int
     battery_end: int
+
+
+@dataclasses.dataclass
+class ChargingRequest:
+    battery_target: int  # The battery level to charge to
+    ready_by: dt.datetime  # The date/time by which the charging should have reached the target battery level
+
+
+@dataclasses.dataclass
+class ChargingRequestResponse:
+    success: bool  # Whether the charging request could be honored
+    reason: str  # Reason that the charging request could not be honored (empty on success)

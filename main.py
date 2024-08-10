@@ -15,7 +15,7 @@ from pyeasee.charger import STATUS as CHARGER_STATUS, Charger
 from ladning.charging_plan import create_charging_plan
 from ladning.energy_prices import get_energy_prices
 from ladning.logging import log
-from ladning.types import ChargingPlan, HourlyPrice, VehicleChargeState
+from ladning.types import ChargingPlan, HourlyPrice, VehicleChargeState, ChargingRequest, ChargingRequestResponse
 from ladning.vehicle_query import get_vehicle_charge_state
 
 from ladning.webservice import LadningService
@@ -29,6 +29,7 @@ class ApplicationState:
         self._vehicle_charge_state: Optional[VehicleChargeState] = None
         self._charging_plan: Optional[ChargingPlan] = None
         self._charger: Optional[Charger] = None
+        self._event_loop = asyncio.get_running_loop()
 
     async def get_charger(self) -> Charger:
         if self._charger is None:
@@ -107,6 +108,17 @@ class ApplicationState:
         self._hourly_prices = hourly_prices
         await self.plan_charging()
 
+    async def on_charging_request(self, request: ChargingRequest) -> ChargingRequestResponse:
+        log.info(f"Received charging request: {request}")
+        return ChargingRequestResponse(False, "Charging requests not supported yet")
+
+    def on_charging_request_sync(self, request: ChargingRequest) -> ChargingRequestResponse:
+        async def _call() -> ChargingRequestResponse:
+            return await self.on_charging_request(request)
+
+        future = asyncio.run_coroutine_threadsafe(_call(), self._event_loop)
+        return future.result()
+
 
 async def listen_for_charging_states(easee: Easee, charger: Charger) -> AsyncIterator[Tuple[Optional[str], str]]:
     queue = asyncio.Queue()
@@ -165,7 +177,8 @@ async def main():
     # Start the webservice used to query and control charging on a worker thread
     webservice = LadningService(host="0.0.0.0", port=args.webservice_port,
                                 electricity_price_getter=state.get_hourly_prices,
-                                charging_plan_getter=state.get_charging_plan)
+                                charging_plan_getter=state.get_charging_plan,
+                                charging_request_setter=state.on_charging_request_sync)
     webservice.start()
 
     # Create a scheduler that will query new energy prices every day at 13:00 local time

@@ -1,23 +1,27 @@
 import threading
 from typing import List, Callable, Optional
 
-from flask import Flask, jsonify, Response
+import datetime as dt
+from flask import Flask, jsonify, Response, request
 import waitress
 
 from ladning.logging import log
-from ladning.types import HourlyPrice, ChargingPlan
+from ladning.types import HourlyPrice, ChargingPlan, ChargingRequest, ChargingRequestResponse
 from dataclasses import asdict
 
 
 class LadningService:
     def __init__(self, host: str, port: int, electricity_price_getter: Callable[[], List[HourlyPrice]],
-                 charging_plan_getter: Callable[[], Optional[ChargingPlan]]) -> None:
+                 charging_plan_getter: Callable[[], Optional[ChargingPlan]],
+                 charging_request_setter: Callable[[ChargingRequest], ChargingRequestResponse]) -> None:
         self._electricity_price_getter = electricity_price_getter
         self._charging_plan_getter = charging_plan_getter
+        self._charging_request_setter = charging_request_setter
 
         # Create Flask application
         self._service = Flask("ladning")
-        self._service.add_url_rule("/electricity", "electricity", self.electricity)
+        self._service.add_url_rule("/electricity", "electricity", self.electricity, methods=["GET"])
+        self._service.add_url_rule("/charging_request", "charging_request", self.charging_request, methods=["POST"])
         self._server = waitress.create_server(self._service, host=host, port=port, threads=1)
         self._server_thread = threading.Thread(target=self._server.run, name="server_thread", daemon=True)
 
@@ -50,3 +54,13 @@ class LadningService:
             hourly_prices=[asdict(p) for p in hourly_prices]
         )
         return jsonify(combined)
+
+    def charging_request(self) -> Response:
+        # Convert POST data to Python dataclass
+        data = request.json
+        charging_request = ChargingRequest(battery_target=int(data["battery_target"]),
+                                           ready_by=dt.datetime.fromisoformat(data["ready_by"]))
+
+        # Call setter and return result
+        response = self._charging_request_setter(charging_request)
+        return jsonify(asdict(response))
