@@ -28,7 +28,7 @@ class ChargingPlan:
 @dataclasses.dataclass
 class ChargingRequest:
     battery_target: int  # The battery level to charge to
-    ready_by: dt.datetime  # The date/time by which the charging should have reached the target battery level
+    ready_by: Optional[dt.datetime]  # The date/time by which the charging should have reached the target battery level
 
 
 @dataclasses.dataclass
