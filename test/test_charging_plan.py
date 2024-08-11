@@ -12,6 +12,11 @@ def vehicle_50_percent() -> VehicleChargeState:
     return VehicleChargeState(battery_level=50, range_km=200, minutes_to_full_charge=0)
 
 
+@pytest.fixture()
+def vehicle_90_percent() -> VehicleChargeState:
+    return VehicleChargeState(battery_level=90, range_km=350, minutes_to_full_charge=0)
+
+
 def test_argmin() -> None:
     vals = [i for i in range(10)]
     for i in range(10):
@@ -83,3 +88,27 @@ def test_create_charging_plan_ready_by(vehicle_50_percent: VehicleChargeState) -
     assert result.success
     assert result.plan is not None
     assert result.plan.end_time <= hourly_prices[14].start
+
+
+def test_create_charging_plan_immediate_start(vehicle_90_percent: VehicleChargeState) -> None:
+    """
+    Test that the charging plan will ignore hours in the past, but allow starting in the currently ongoing hour
+    """
+    five_minutes_ago = dt.datetime.now().astimezone() - dt.timedelta(minutes=5)
+    hourly_prices: List[HourlyPrice] = [
+        # Make some hours in the past the cheapest
+        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=5), price_kwh_dkk=0.1, co2_emission=None),
+        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=4), price_kwh_dkk=0.1, co2_emission=None),
+        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=3), price_kwh_dkk=0.1, co2_emission=None),
+        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=2), price_kwh_dkk=1.0, co2_emission=None),
+        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=1), price_kwh_dkk=1.0, co2_emission=None),
+        # Make the hour that started 5 minutes ago the next best selection
+        HourlyPrice(start=five_minutes_ago, price_kwh_dkk=0.5, co2_emission=None),
+        HourlyPrice(start=five_minutes_ago + dt.timedelta(hours=1), price_kwh_dkk=1.0, co2_emission=None),
+        HourlyPrice(start=five_minutes_ago + dt.timedelta(hours=2), price_kwh_dkk=1.0, co2_emission=None),
+    ]
+
+    result = create_charging_plan(vehicle_90_percent, hourly_prices, ChargingRequest(battery_target=100, ready_by=None))
+    assert result.success
+    assert result.plan is not None
+    assert result.plan.start_time == five_minutes_ago

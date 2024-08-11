@@ -30,9 +30,13 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
     hours_required_to_charge_to_full = ((charging_request.battery_target -
                                          vehicle_charge_state.battery_level) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW
 
-    # Disregard hourly prices later than the charging request's end time if applicable
-    hourly_prices_valid = hourly_prices if charging_request.ready_by is None \
-        else [p for p in hourly_prices if p.start + dt.timedelta(hours=1) <= charging_request.ready_by]
+    # Disregard hourly prices later than the charging request's end time if applicable, and disregard hourly prices
+    # fully in the past (ongoing hour is valid)
+    hourly_prices_valid = [
+        p for p in hourly_prices
+        if (charging_request.ready_by is not None and (p.start + dt.timedelta(hours=1) <= charging_request.ready_by)) or
+           (p.start >= dt.datetime.now().astimezone() - dt.timedelta(hours=1))
+    ]
 
     # Check if a sufficient amount of hours exists for the ready by time to be honored
     if len(hourly_prices_valid) < math.ceil(hours_required_to_charge_to_full):
