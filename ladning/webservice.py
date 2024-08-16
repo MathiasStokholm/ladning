@@ -4,6 +4,7 @@ from typing import List, Callable, Optional
 import datetime as dt
 from flask import Flask, jsonify, Response, request
 import waitress
+from flask_cors import CORS
 
 from ladning.logging import log
 from ladning.types import HourlyPrice, ChargingPlan, ChargingRequest, ChargingRequestResponse
@@ -20,6 +21,11 @@ class LadningService:
 
         # Create Flask application
         self._service = Flask("ladning")
+
+        # Enable cross-site requests
+        CORS(self._service)
+
+        # Add API endpoints
         self._service.add_url_rule("/electricity", "electricity", self.electricity, methods=["GET"])
         self._service.add_url_rule("/charging_request", "charging_request", self.charging_request, methods=["POST"])
         self._server = waitress.create_server(self._service, host=host, port=port, threads=1)
