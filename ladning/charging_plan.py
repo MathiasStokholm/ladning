@@ -2,7 +2,7 @@ from typing import List, Optional
 import datetime as dt
 import math
 
-from ladning.constants import BATTERY_CAPACITY_KWH, CHARGING_KW
+from ladning.constants import BATTERY_CAPACITY_KWH, CHARGING_KW_MAX, CHARGING_KW_END
 from ladning.types import VehicleChargeState, HourlyPrice, ChargingPlan, ChargingRequest, ChargingRequestResponse
 
 
@@ -58,12 +58,15 @@ def hours_as_signal(hours: float, partial_first: bool) -> List[float]:
     return sig
 
 
-def calculate_hours_required_to_charge(battery_state: int, target_state: int) -> Optional[float]:
+def calculate_hours_required_to_charge(battery_state: int, target_state: int,
+                                       full_charge_safety_margin_minutes: int = 0) -> Optional[float]:
     """
     Calculate the number of hours required to charge from one battery state to the target battery state
 
     :param battery_state: The starting battery state in the range [0, 100]
     :param target_state: The target battery state in the range [0, 100]
+    :param full_charge_safety_margin_minutes: Additional number of minutes to add as a safety margin when charging to
+    100%
     :return: The fractional number of hours required to charge, or None if no charging is required
     """
     if battery_state < 0 or battery_state > 100:
@@ -73,12 +76,29 @@ def calculate_hours_required_to_charge(battery_state: int, target_state: int) ->
     if battery_state >= target_state:
         return None
 
-    hours_required = ((target_state - battery_state) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW
+    if target_state < 95:
+        # If target is below 95%, only consider the full charging speed
+        return ((target_state - battery_state) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW_MAX
+
+    # If charging above 95%, consider the slower charging at the end
+    hours_required_to_95_percent = ((95 - battery_state) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW_MAX
+    hours_required_from_95_percent = ((target_state - 95) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW_END
+
+    hours_required = 0
+    if hours_required_to_95_percent > 0:
+        hours_required += hours_required_to_95_percent
+    if hours_required_from_95_percent > 0:
+        hours_required += hours_required_from_95_percent
+
+    # Add safety margin if applicable
+    if target_state == 100 and full_charge_safety_margin_minutes > 0:
+        hours_required += full_charge_safety_margin_minutes / 60.0
     return hours_required
 
 
 def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices: List[HourlyPrice],
-                         charging_request: ChargingRequest) -> ChargingRequestResponse:
+                         charging_request: ChargingRequest,
+                         full_charge_safety_margin_minutes: int = 0) -> ChargingRequestResponse:
     # Check if charging is needed at all
     if not vehicle_charge_state.battery_level < charging_request.battery_target:
         return ChargingRequestResponse(False, reason="Vehicle battery level already at or above target", plan=None)
@@ -88,7 +108,8 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
 
     # Charging is needed - calculate plan
     maybe_hours_required_to_charge = calculate_hours_required_to_charge(vehicle_charge_state.battery_level,
-                                                                        charging_request.battery_target)
+                                                                        charging_request.battery_target,
+                                                                        full_charge_safety_margin_minutes)
     if maybe_hours_required_to_charge is None:
         return ChargingRequestResponse(False, reason="Vehicle battery level already at or above target", plan=None)
     hours_required_to_charge = maybe_hours_required_to_charge

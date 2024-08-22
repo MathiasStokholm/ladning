@@ -4,7 +4,7 @@ import pytest
 import datetime as dt
 
 from ladning.charging_plan import create_charging_plan, argmin, convolve_valid, hours_as_signal
-from ladning.constants import BATTERY_CAPACITY_KWH, CHARGING_KW
+from ladning.constants import BATTERY_CAPACITY_KWH, CHARGING_KW_MAX, CHARGING_KW_END
 from ladning.types import VehicleChargeState, HourlyPrice, ChargingRequest
 
 
@@ -18,12 +18,22 @@ def vehicle_90_percent() -> VehicleChargeState:
     return VehicleChargeState(battery_level=90, range_km=350, minutes_to_full_charge=0)
 
 
-def vehicle_charge_state_required_for_charging_duration_to_full(hours_of_charging: float) -> VehicleChargeState:
+def vehicle_charge_state_required_for_charging_duration_to_full(hours_of_charging: float)\
+        -> VehicleChargeState:
     """
     This is essentially the inverse of calculate_hours_required_to_charge()
     """
     target_state = 100
-    battery_state = int(target_state - hours_of_charging * CHARGING_KW / BATTERY_CAPACITY_KWH * 100.0)
+    hours_required_from_95_percent = ((100 - 95) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW_END
+
+    if hours_of_charging < hours_required_from_95_percent:
+        # Charging between 95 and 100%
+        battery_state = int(target_state - hours_of_charging * CHARGING_KW_END / BATTERY_CAPACITY_KWH * 100.0)
+    else:
+        # Charging between <95% and 100%
+        battery_state = 95
+        additional_hours = hours_of_charging - hours_required_from_95_percent
+        battery_state -= int(additional_hours * CHARGING_KW_MAX / BATTERY_CAPACITY_KWH * 100.0)
     return VehicleChargeState(battery_state, 350, 0)
 
 
@@ -138,6 +148,7 @@ def test_create_charging_plan_immediate_start(vehicle_90_percent: VehicleChargeS
         HourlyPrice(start=five_minutes_ago, price_kwh_dkk=0.5, co2_emission=None),
         HourlyPrice(start=five_minutes_ago + dt.timedelta(hours=1), price_kwh_dkk=1.0, co2_emission=None),
         HourlyPrice(start=five_minutes_ago + dt.timedelta(hours=2), price_kwh_dkk=1.0, co2_emission=None),
+        HourlyPrice(start=five_minutes_ago + dt.timedelta(hours=3), price_kwh_dkk=1.0, co2_emission=None),
     ]
 
     result = create_charging_plan(vehicle_90_percent, hourly_prices, ChargingRequest(battery_target=100, ready_by=None))
