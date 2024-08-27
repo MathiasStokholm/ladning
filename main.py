@@ -228,13 +228,20 @@ async def main():
     scheduler = AsyncIOScheduler()
 
     async def _try_update_prices():
-        try:
-            prices = get_energy_prices()
-            await state.on_new_hourly_prices(prices)
-        except Exception as e:
-            log.error(f"Error while loading new energy prices: '{e}'")
+        retry_minutes = 15
+        success = False
+        while not success:
+            try:
+                prices = get_energy_prices()
+                await state.on_new_hourly_prices(prices)
+                success = True
+            except Exception as e:
+                log.error(f"Error while loading new energy prices: '{e}' - retrying in {retry_minutes} minutes")
+                await asyncio.sleep(retry_minutes * 60)
 
-    scheduler.add_job(_try_update_prices, CronTrigger(hour=13, timezone=dt.datetime.now().astimezone().tzinfo))
+    # Use max_instances here in case the job is looping with retries due to API being down
+    scheduler.add_job(_try_update_prices, CronTrigger(hour=13, timezone=dt.datetime.now().astimezone().tzinfo),
+                      max_instances=1)
     scheduler.start()
 
     # Run the main smart charging loop
