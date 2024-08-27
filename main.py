@@ -58,6 +58,12 @@ class ApplicationState:
                 await self.cancel_charging()
                 self._vehicle_charge_state = None
                 continue
+            if new_state == "COMPLETED":
+                # If charging was completed, simply
+                log.info("Charging completed")
+                await self.complete_charging()
+                self._vehicle_charge_state = None
+                continue
 
             # If previous state was None (app just started) or disconnected, consider whether to perform planning
             app_just_launched = previous_state is None
@@ -114,6 +120,15 @@ class ApplicationState:
 
         # Reset charging request
         log.info(f"Resetting charging request due to cancelled charging")
+        self._charging_request = ApplicationState.DEFAULT_CHARGING_REQUEST
+
+    async def complete_charging(self) -> None:
+        """
+        Mark the current charging plan as completed
+        Note: This will not cancel the plan
+        """
+        self._charging_plan = None
+        log.info(f"Resetting charging request due to completed charging")
         self._charging_request = ApplicationState.DEFAULT_CHARGING_REQUEST
 
     async def on_new_hourly_prices(self, hourly_prices: List[HourlyPrice]) -> None:
