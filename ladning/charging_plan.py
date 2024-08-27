@@ -2,7 +2,8 @@ from typing import List, Optional
 import datetime as dt
 import math
 
-from ladning.constants import BATTERY_CAPACITY_KWH, CHARGING_KW_MAX, CHARGING_KW_END
+from ladning.constants import BATTERY_CAPACITY_KWH, CHARGING_KW_MAX, CHARGING_KW_END, APPROX_MAX_RANGE_KM, \
+    TAX_REFUND_DKK_KWH
 from ladning.types import VehicleChargeState, HourlyPrice, ChargingPlan, ChargingRequest, ChargingRequestResponse
 
 
@@ -56,6 +57,19 @@ def hours_as_signal(hours: float, partial_first: bool) -> List[float]:
         else:
             sig.append(fractional_hour)
     return sig
+
+
+def estimate_added_range(battery_state: int, target_state: int) -> float:
+    """
+    Estimate the added range by moving from the current battery state to a target battery state
+
+    :param battery_state: The starting battery state in the range [0, 100]
+    :param target_state: The target battery state in the range [0, 100]
+    :return: The estimated added range in kilometers
+    """
+    range_per_percentage = APPROX_MAX_RANGE_KM / 100.0
+    battery_diff = float(target_state - battery_state)
+    return range_per_percentage * battery_diff
 
 
 def calculate_hours_required_to_charge(battery_state: int, target_state: int,
@@ -133,9 +147,12 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
     # Pick cheapest consecutive hours for charging
     # This yields the total price for starting at time N and finishing the required M hours later
     # Note that the array is shorter than the input array by M due to not being able to sum past the end of the array
-    full_hour_total_prices = convolve_valid([p.price_kwh_dkk for p in hourly_prices_valid], full_hour_start_strategy)
-    partial_hour_total_prices = convolve_valid([p.price_kwh_dkk for p in hourly_prices_valid],
-                                               partial_hour_start_strategy)
+    prices_after_refund = [p.price_kwh_dkk - TAX_REFUND_DKK_KWH for p in hourly_prices_valid]
+    full_hour_total_prices = convolve_valid(prices_after_refund, full_hour_start_strategy)
+    partial_hour_total_prices = convolve_valid(prices_after_refund, partial_hour_start_strategy)
+
+    # Estimate the added range in km
+    range_added = estimate_added_range(vehicle_charge_state.battery_level, charging_request.battery_target)
 
     # Check which hourly strategy yields the lowest total price
     if min(full_hour_total_prices) <= min(partial_hour_total_prices):
@@ -146,7 +163,10 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
         return ChargingRequestResponse(success=True, reason="",
                                        plan=ChargingPlan(start_time=start_time, end_time=end_time,
                                                          battery_start=vehicle_charge_state.battery_level,
-                                                         battery_end=charging_request.battery_target))
+                                                         battery_end=charging_request.battery_target,
+                                                         total_cost_dkk=min(full_hour_total_prices),
+                                                         range_added_km=range_added
+                                                         ))
     else:
         # Partial hour strategy works best
         start_idx = argmin(partial_hour_total_prices)
@@ -160,4 +180,7 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
         return ChargingRequestResponse(success=True, reason="",
                                        plan=ChargingPlan(start_time=start_time, end_time=end_time,
                                                          battery_start=vehicle_charge_state.battery_level,
-                                                         battery_end=charging_request.battery_target))
+                                                         battery_end=charging_request.battery_target,
+                                                         total_cost_dkk=min(partial_hour_total_prices),
+                                                         range_added_km=range_added
+                                                         ))

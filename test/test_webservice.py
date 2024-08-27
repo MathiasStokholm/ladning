@@ -28,12 +28,12 @@ def hourly_price_getter() -> Callable[[], List[HourlyPrice]]:
 @pytest.fixture
 def charging_plan_getter() -> Callable[[], Optional[ChargingPlan]]:
     return lambda: ChargingPlan(dt.datetime.now().astimezone(), dt.datetime.now().astimezone() + dt.timedelta(hours=1),
-                                90, 100)
+                                90, 100, 10.0, 120.0)
 
 
 @pytest.fixture()
 def charging_request_setter() -> Callable[[ChargingRequest], ChargingRequestResponse]:
-    return lambda _: ChargingRequestResponse(success=True, reason="")
+    return lambda _: ChargingRequestResponse(success=True, reason="", plan=None)
 
 
 def test_webservice_query(hourly_price_getter: Callable[[], List[HourlyPrice]],
@@ -66,7 +66,9 @@ def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Hour
         return ChargingRequestResponse(success=True, reason="",
                                        plan=ChargingPlan(dt.datetime.now().astimezone(),
                                                          dt.datetime.now().astimezone() + dt.timedelta(hours=5),
-                                                         battery_start=50, battery_end=req.battery_target))
+                                                         battery_start=50, battery_end=req.battery_target,
+                                                         total_cost_dkk=50.0,
+                                                         range_added_km=210.0))
 
     def failure(_: ChargingRequest) -> ChargingRequestResponse:
         return ChargingRequestResponse(success=False, reason="It failed!", plan=None)

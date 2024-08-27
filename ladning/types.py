@@ -23,6 +23,8 @@ class ChargingPlan:
     end_time: dt.datetime
     battery_start: int
     battery_end: int
+    total_cost_dkk: float
+    range_added_km: float
 
 
 @dataclasses.dataclass
