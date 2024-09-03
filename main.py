@@ -145,7 +145,7 @@ class ApplicationState:
     async def on_charging_request(self, request: ChargingRequest) -> ChargingRequestResponse:
         log.info(f"Received charging request: {request}")
         if request.battery_target <= 0 or request.battery_target > 100:
-            return ChargingRequestResponse(False, "Target battery level outside valid range")
+            return ChargingRequestResponse(False, "Target battery level outside valid range", plan=None)
 
         self._charging_request = request
         result = await self.plan_charging()
