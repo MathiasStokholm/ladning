@@ -167,7 +167,8 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
                                        plan=ChargingPlan(start_time=start_time, end_time=end_time,
                                                          battery_start=vehicle_charge_state.battery_level,
                                                          battery_end=charging_request.battery_target,
-                                                         total_cost_dkk=min(full_hour_total_prices),
+                                                         # HACK: Workaround until we get a proper energy signal
+                                                         total_cost_dkk=min(full_hour_total_prices) * 10.0,
                                                          range_added_km=range_added
                                                          ))
     else:
@@ -184,6 +185,7 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
                                        plan=ChargingPlan(start_time=start_time, end_time=end_time,
                                                          battery_start=vehicle_charge_state.battery_level,
                                                          battery_end=charging_request.battery_target,
-                                                         total_cost_dkk=min(partial_hour_total_prices),
+                                                         # HACK: Workaround until we get a proper energy signal
+                                                         total_cost_dkk=min(partial_hour_total_prices) * 10.0,
                                                          range_added_km=range_added
                                                          ))
