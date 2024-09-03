@@ -23,7 +23,7 @@ from ladning.webservice import LadningService
 
 class ApplicationState:
     DEFAULT_CHARGING_REQUEST = ChargingRequest(battery_target=100, ready_by=None)
-    FULL_CHARGE_SAFETY_MARGIN_MINUTES = 5
+    FULL_CHARGE_SAFETY_MARGIN_MINUTES = 15
 
     def __init__(self, easee: Easee, tesla: teslapy.Tesla, hourly_prices: List[HourlyPrice]) -> None:
         self._easee = easee
