@@ -115,7 +115,7 @@ def test_create_charging_plan_no_hours(vehicle_50_percent: VehicleChargeState) -
 
 
 def test_create_charging_plan_ready_by(vehicle_50_percent: VehicleChargeState) -> None:
-    start_time = dt.datetime(2024, 8, 3, 0, 0, 0, 0).astimezone()
+    start_time = dt.datetime.now().astimezone()
     hourly_prices: List[HourlyPrice] = [
         HourlyPrice(start=start_time + dt.timedelta(hours=i), price_kwh_dkk=1.0, co2_emission=None)
         for i in range(24)
