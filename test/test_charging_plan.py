@@ -4,9 +4,10 @@ from typing import List
 import pytest
 import datetime as dt
 
-from ladning.charging_plan import create_charging_plan, argmin, convolve_valid, calculate_energy_need
+from ladning.charging_plan import create_charging_plan, argmin, convolve_valid, calculate_energy_need, \
+    shift_fractional_forward
 from ladning.constants import BATTERY_CAPACITY_KWH, CHARGING_KW_MAX, CHARGING_KW_END
-from ladning.types import VehicleChargeState, HourlyPrice, ChargingRequest
+from ladning.types import VehicleChargeState, HourlyPrice, ChargingRequest, EnergyNeed
 
 
 @pytest.fixture()
@@ -100,6 +101,17 @@ def test_convolve_valid_both_empty() -> None:
     signal2 = []
     expected = []  # No valid portion
     assert convolve_valid(signal1, signal2) == expected
+
+
+def test_shift_fractional_forward() -> None:
+    energy_need = EnergyNeed([10.6, 10.6, 8.6, 2.8], 3.8)
+    shifted_need = shift_fractional_forward(energy_need)
+    assert shifted_need.hours_required == energy_need.hours_required
+    assert len(shifted_need.energy_signal) == len(energy_need.energy_signal)
+    assert shifted_need.energy_signal[0] == pytest.approx(10.6 * 0.8)
+    assert shifted_need.energy_signal[1] == pytest.approx(10.6)
+    assert shifted_need.energy_signal[2] == pytest.approx(10.6)
+    assert sum(shifted_need.energy_signal) == pytest.approx(sum(energy_need.energy_signal))
 
 
 def test_calculate_energy_need_invalid_inputs() -> None:
@@ -199,27 +211,27 @@ def test_create_charging_plan_immediate_start(vehicle_90_percent: VehicleChargeS
     assert result.plan is not None
     assert result.plan.start_time == five_minutes_ago
 
-# Disabled for now
-# def test_create_charging_plan_early_partial_start() -> None:
-#     """
-#     Test that the charging plan will start early (partial hour) in the event that charging mostly in a given hour is
-#     optimal
-#     """
-#     # Create a situation where vehicle needs to charge for 1.5 hours and the optimal time is the full third hour, plus
-#     # half of the second hour
-#     vehicle_state = vehicle_charge_state_required_for_charging_duration_to_full(1.5)
-#     now = dt.datetime.now().astimezone()
-#     hourly_prices: List[HourlyPrice] = [
-#         # Make some hours in the past the cheapest
-#         HourlyPrice(start=now + dt.timedelta(hours=1), price_kwh_dkk=1, co2_emission=None),
-#         HourlyPrice(start=now + dt.timedelta(hours=2), price_kwh_dkk=0.6, co2_emission=None),
-#         HourlyPrice(start=now + dt.timedelta(hours=3), price_kwh_dkk=0.1, co2_emission=None),
-#         HourlyPrice(start=now + dt.timedelta(hours=4), price_kwh_dkk=0.61, co2_emission=None),
-#         HourlyPrice(start=now + dt.timedelta(hours=5), price_kwh_dkk=1, co2_emission=None),
-#         HourlyPrice(start=now + dt.timedelta(hours=6), price_kwh_dkk=1, co2_emission=None),
-#     ]
-#     result = create_charging_plan(vehicle_state, hourly_prices, ChargingRequest(battery_target=100, ready_by=None))
-#     assert result.success
-#     assert result.plan is not None
-#     assert hourly_prices[1].start < result.plan.start_time < hourly_prices[2].start
+
+def test_create_charging_plan_early_partial_start() -> None:
+    """
+    Test that the charging plan will start early (partial hour) in the event that charging mostly in a given hour is
+    optimal
+    """
+    # Create a situation where vehicle needs to charge for 1.5 hours and the optimal time is the full third hour, plus
+    # half of the second hour
+    vehicle_state = vehicle_charge_state_required_for_charging_duration_to_full(1.5)
+    now = dt.datetime.now().astimezone()
+    hourly_prices: List[HourlyPrice] = [
+        # Make some hours in the past the cheapest
+        HourlyPrice(start=now + dt.timedelta(hours=1), price_kwh_dkk=2, co2_emission=None),
+        HourlyPrice(start=now + dt.timedelta(hours=2), price_kwh_dkk=1.4, co2_emission=None),
+        HourlyPrice(start=now + dt.timedelta(hours=3), price_kwh_dkk=1.1, co2_emission=None),
+        HourlyPrice(start=now + dt.timedelta(hours=4), price_kwh_dkk=1.91, co2_emission=None),
+        HourlyPrice(start=now + dt.timedelta(hours=5), price_kwh_dkk=2, co2_emission=None),
+        HourlyPrice(start=now + dt.timedelta(hours=6), price_kwh_dkk=2, co2_emission=None),
+    ]
+    result = create_charging_plan(vehicle_state, hourly_prices, ChargingRequest(battery_target=100, ready_by=None))
+    assert result.success
+    assert result.plan is not None
+    assert hourly_prices[1].start < result.plan.start_time < hourly_prices[2].start
     # Note: Rounding errors mean that we cannot check the start time precisely here
