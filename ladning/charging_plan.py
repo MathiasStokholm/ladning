@@ -97,6 +97,15 @@ def calculate_energy_need(battery_state: int, target_state: int,
         energy_signal.extend([CHARGING_KW_MAX] * int(full_hours_to_95) + [CHARGING_KW_MAX * fractional_hour_to_95])
     if hours_required_from_95_percent > 0:
         hours_required += hours_required_from_95_percent
+
+        # Modify existing fractional energy signal entry according to lower charge rate (for the remaining time)
+        if len(energy_signal) > 0:
+            hourly_need, _ = math.modf(hours_required_to_95_percent)
+            available_time = 1.0 - hourly_need
+            energy_signal[-1] += available_time * CHARGING_KW_END
+            hours_required_from_95_percent -= available_time
+
+        # Add remaining reduced energy signal entries
         fractional_hour_from_95, full_hours_from_95 = math.modf(hours_required_from_95_percent)
         energy_signal.extend([CHARGING_KW_END] * int(full_hours_from_95) + [CHARGING_KW_END * fractional_hour_from_95])
 
@@ -141,16 +150,12 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
     if len(hourly_prices_valid) < math.ceil(energy_need.hours_required):
         return ChargingRequestResponse(False, reason="Not enough time to charge to the requested level", plan=None)
 
-    # Compute signals that define potential starting strategies
-    full_hour_start_strategy = hours_as_signal(hours_required_to_charge, partial_first=False)
-    partial_hour_start_strategy = hours_as_signal(hours_required_to_charge, partial_first=True)
-
     # Pick cheapest consecutive hours for charging
     # This yields the total price for starting at time N and finishing the required M hours later
     # Note that the array is shorter than the input array by M due to not being able to sum past the end of the array
     prices_after_refund = [p.price_kwh_dkk - TAX_REFUND_DKK_KWH for p in hourly_prices_valid]
-    full_hour_total_prices = convolve_valid(prices_after_refund, full_hour_start_strategy)
-    partial_hour_total_prices = convolve_valid(prices_after_refund, partial_hour_start_strategy)
+    full_hour_total_prices = convolve_valid(prices_after_refund, energy_need.energy_signal)
+    partial_hour_total_prices = convolve_valid(prices_after_refund, energy_need.energy_signal)
 
     # Estimate the added range in km
     range_added = estimate_added_range(vehicle_charge_state.battery_level, charging_request.battery_target)
@@ -160,30 +165,30 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
         # Full hour strategy works best
         start_idx = argmin(full_hour_total_prices)
         start_time = hourly_prices_valid[start_idx].start
-        end_time = start_time + dt.timedelta(hours=hours_required_to_charge)
+        end_time = start_time + dt.timedelta(hours=energy_need.hours_required)
         return ChargingRequestResponse(success=True, reason="",
                                        plan=ChargingPlan(start_time=start_time, end_time=end_time,
                                                          battery_start=vehicle_charge_state.battery_level,
                                                          battery_end=charging_request.battery_target,
-                                                         # HACK: Workaround until we get a proper energy signal
-                                                         total_cost_dkk=min(full_hour_total_prices) * 10.0,
+                                                         total_cost_dkk=min(full_hour_total_prices),
                                                          range_added_km=range_added
                                                          ))
-    else:
-        # Partial hour strategy works best
-        start_idx = argmin(partial_hour_total_prices)
-        starting_hour = hourly_prices_valid[start_idx].start
-
-        # Determine how many minutes into the hour to start
-        hourly_fraction = partial_hour_start_strategy[0]
-        minutes_into_hour = (1.0 - hourly_fraction) * 60.0
-        start_time = starting_hour + dt.timedelta(minutes=minutes_into_hour)
-        end_time = start_time + dt.timedelta(hours=hours_required_to_charge)
-        return ChargingRequestResponse(success=True, reason="",
-                                       plan=ChargingPlan(start_time=start_time, end_time=end_time,
-                                                         battery_start=vehicle_charge_state.battery_level,
-                                                         battery_end=charging_request.battery_target,
-                                                         # HACK: Workaround until we get a proper energy signal
-                                                         total_cost_dkk=min(partial_hour_total_prices) * 10.0,
-                                                         range_added_km=range_added
-                                                         ))
+    # Disabled for now
+    # else:
+    #     # Partial hour strategy works best
+    #     start_idx = argmin(partial_hour_total_prices)
+    #     starting_hour = hourly_prices_valid[start_idx].start
+    #
+    #     # Determine how many minutes into the hour to start
+    #     hourly_fraction = partial_hour_start_strategy[0]
+    #     minutes_into_hour = (1.0 - hourly_fraction) * 60.0
+    #     start_time = starting_hour + dt.timedelta(minutes=minutes_into_hour)
+    #     end_time = start_time + dt.timedelta(hours=hours_required_to_charge)
+    #     return ChargingRequestResponse(success=True, reason="",
+    #                                    plan=ChargingPlan(start_time=start_time, end_time=end_time,
+    #                                                      battery_start=vehicle_charge_state.battery_level,
+    #                                                      battery_end=charging_request.battery_target,
+    #                                                      # HACK: Workaround until we get a proper energy signal
+    #                                                      total_cost_dkk=min(partial_hour_total_prices) * 10.0,
+    #                                                      range_added_km=range_added
+    #                                                      ))
