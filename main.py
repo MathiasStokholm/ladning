@@ -172,7 +172,7 @@ async def listen_for_charging_states(easee: Easee, charger: Charger) -> AsyncIte
     yield None, current_charging_state
 
     async def _signalr_callback(_, __, data_id, value):
-        if pyeasee.ChargerStreamData(data_id) == pyeasee.ChargerStreamData.state_chargerOpMode:
+        if data_id == pyeasee.ChargerStreamData.state_chargerOpMode.value:
             new_charging_state = CHARGER_STATUS[value]
 
             nonlocal current_charging_state
