@@ -1,9 +1,10 @@
+import math
 from typing import List
 
 import pytest
 import datetime as dt
 
-from ladning.charging_plan import create_charging_plan, argmin, convolve_valid, hours_as_signal
+from ladning.charging_plan import create_charging_plan, argmin, convolve_valid, calculate_energy_need
 from ladning.constants import BATTERY_CAPACITY_KWH, CHARGING_KW_MAX, CHARGING_KW_END
 from ladning.types import VehicleChargeState, HourlyPrice, ChargingRequest
 
@@ -101,11 +102,38 @@ def test_convolve_valid_both_empty():
     assert convolve_valid(signal1, signal2) == expected
 
 
-def test_hours_as_signal():
-    assert hours_as_signal(4.0, partial_first=True) == [1.0] * 4
-    assert hours_as_signal(4.0, partial_first=False) == [1.0] * 4
-    assert hours_as_signal(2.5, partial_first=True) == [0.5, 1.0, 1.0]
-    assert hours_as_signal(2.5, partial_first=False) == [1.0, 1.0, 0.5]
+def test_calculate_energy_need_invalid_inputs() -> None:
+    # Target state less than current battery state
+    assert calculate_energy_need(battery_state=90, target_state=89) is None
+
+    # Negative inputs
+    with pytest.raises(RuntimeError):
+        calculate_energy_need(battery_state=10, target_state=-1)
+    with pytest.raises(RuntimeError):
+        calculate_energy_need(battery_state=-1, target_state=10)
+
+    # Inputs above 100%
+    with pytest.raises(RuntimeError):
+        calculate_energy_need(battery_state=110, target_state=90)
+    with pytest.raises(RuntimeError):
+        calculate_energy_need(battery_state=90, target_state=110)
+
+
+def test_calculate_energy_need_below_95() -> None:
+    current = 0.4
+    target = 0.95
+    diff = target - current
+    energy_need = calculate_energy_need(battery_state=int(current * 100), target_state=int(target * 100))
+    assert energy_need is not None
+
+    # The energy signal should sum to the total energy need
+    assert sum(energy_need.energy_signal) == pytest.approx(diff * BATTERY_CAPACITY_KWH)
+
+    # All the full hours (except the last fractional hour) should charge at max rate
+    # The last fractional hour should also charge at max rate, but for less than a full hour
+    fractional_hour, full_hours = math.modf(energy_need.hours_required)
+    assert energy_need.energy_signal[:-1] == [CHARGING_KW_MAX] * int(full_hours)
+    assert energy_need.energy_signal[-1] == pytest.approx(fractional_hour * CHARGING_KW_MAX)
 
 
 def test_create_charging_plan_no_hours(vehicle_50_percent: VehicleChargeState) -> None:

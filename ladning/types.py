@@ -1,6 +1,6 @@
 import dataclasses
 import datetime as dt
-from typing import Optional
+from typing import Optional, List
 
 
 @dataclasses.dataclass
@@ -25,6 +25,12 @@ class ChargingPlan:
     battery_end: int
     total_cost_dkk: float
     range_added_km: float
+
+
+@dataclasses.dataclass
+class EnergyNeed:
+    energy_signal: List[float]
+    hours_required: float
 
 
 @dataclasses.dataclass

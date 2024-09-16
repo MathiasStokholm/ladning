@@ -4,7 +4,8 @@ import math
 
 from ladning.constants import BATTERY_CAPACITY_KWH, CHARGING_KW_MAX, CHARGING_KW_END, APPROX_MAX_RANGE_KM, \
     TAX_REFUND_DKK_KWH
-from ladning.types import VehicleChargeState, HourlyPrice, ChargingPlan, ChargingRequest, ChargingRequestResponse
+from ladning.types import VehicleChargeState, HourlyPrice, ChargingPlan, ChargingRequest, ChargingRequestResponse, \
+    EnergyNeed
 
 
 def argmin(a: List[float]) -> int:
@@ -41,24 +42,6 @@ def convolve_valid(signal1: List[float], signal2: List[float]) -> List[float]:
     return result
 
 
-def hours_as_signal(hours: float, partial_first: bool) -> List[float]:
-    """
-    Create a signal to use for convolution from a number of hours, e.g. 3.1 -> [1.0, 1.0, 1.0, 0.1]
-
-    :param hours: The (possibly fractional) number of hours to create a signal for
-    :param partial_first: Whether to place the fractional hour at the front of the signal (otherwise place at back)
-    :return: The created signal
-    """
-    fractional_hour, full_hours = math.modf(hours)
-    sig = [1.0] * int(full_hours)
-    if fractional_hour != 0:
-        if partial_first:
-            sig.insert(0, fractional_hour)
-        else:
-            sig.append(fractional_hour)
-    return sig
-
-
 def estimate_added_range(battery_state: int, target_state: int) -> float:
     """
     Estimate the added range by moving from the current battery state to a target battery state
@@ -72,16 +55,16 @@ def estimate_added_range(battery_state: int, target_state: int) -> float:
     return range_per_percentage * battery_diff
 
 
-def calculate_hours_required_to_charge(battery_state: int, target_state: int,
-                                       full_charge_safety_margin_minutes: int = 0) -> Optional[float]:
+def calculate_energy_need(battery_state: int, target_state: int,
+                          full_charge_safety_margin_minutes: int = 0) -> Optional[EnergyNeed]:
     """
-    Calculate the number of hours required to charge from one battery state to the target battery state
+    Calculate the energy need required to charge from one battery state to the target battery state
 
     :param battery_state: The starting battery state in the range [0, 100]
     :param target_state: The target battery state in the range [0, 100]
     :param full_charge_safety_margin_minutes: Additional number of minutes to add as a safety margin when charging to
     100%
-    :return: The fractional number of hours required to charge, or None if no charging is required
+    :return: The energy need object, or None if no charging is required
     """
     if battery_state < 0 or battery_state > 100:
         raise RuntimeError(f"Starting battery state has to be in range [0, 100], was '{battery_state}'")
@@ -92,22 +75,37 @@ def calculate_hours_required_to_charge(battery_state: int, target_state: int,
 
     if target_state < 95:
         # If target is below 95%, only consider the full charging speed
-        return ((target_state - battery_state) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW_MAX
+        hours_required = ((target_state - battery_state) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW_MAX
 
-    # If charging above 95%, consider the slower charging at the end
+        # The energy signal is 'CHARGING_KW_MAX' for the full hours, followed by 'CHARGING_KW_MAX' for a fractional part
+        # of the last hour
+        fractional_hour, full_hours = math.modf(hours_required)
+        energy_signal = [CHARGING_KW_MAX] * int(full_hours) + [CHARGING_KW_MAX * fractional_hour]
+        return EnergyNeed(energy_signal=energy_signal, hours_required=hours_required)
+
+    # If charging above 95%, first charge at full rate to 95% ...
     hours_required_to_95_percent = ((95 - battery_state) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW_MAX
+
+    # ... then charge the remaining 5% at a lower rate
     hours_required_from_95_percent = ((target_state - 95) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW_END
 
+    energy_signal: List[float] = []
     hours_required = 0
     if hours_required_to_95_percent > 0:
         hours_required += hours_required_to_95_percent
+        fractional_hour_to_95, full_hours_to_95 = math.modf(hours_required_to_95_percent)
+        energy_signal.extend([CHARGING_KW_MAX] * int(full_hours_to_95) + [CHARGING_KW_MAX * fractional_hour_to_95])
     if hours_required_from_95_percent > 0:
         hours_required += hours_required_from_95_percent
+        fractional_hour_from_95, full_hours_from_95 = math.modf(hours_required_from_95_percent)
+        energy_signal.extend([CHARGING_KW_END] * int(full_hours_from_95) + [CHARGING_KW_END * fractional_hour_from_95])
 
     # Add safety margin if applicable
     if target_state == 100 and full_charge_safety_margin_minutes > 0:
         hours_required += full_charge_safety_margin_minutes / 60.0
-    return hours_required
+        energy_signal.extend([0])  # TODO: FIX THIS
+
+    return EnergyNeed(energy_signal=energy_signal, hours_required=hours_required)
 
 
 def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices: List[HourlyPrice],
@@ -121,12 +119,12 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
         raise RuntimeError("Empty list of hourly prices, cannot create charging plan")
 
     # Charging is needed - calculate plan
-    maybe_hours_required_to_charge = calculate_hours_required_to_charge(vehicle_charge_state.battery_level,
-                                                                        charging_request.battery_target,
-                                                                        full_charge_safety_margin_minutes)
-    if maybe_hours_required_to_charge is None:
+    maybe_energy_need = calculate_energy_need(vehicle_charge_state.battery_level,
+                                                           charging_request.battery_target,
+                                                           full_charge_safety_margin_minutes)
+    if maybe_energy_need is None:
         return ChargingRequestResponse(False, reason="Vehicle battery level already at or above target", plan=None)
-    hours_required_to_charge = maybe_hours_required_to_charge
+    energy_need = maybe_energy_need
 
     # Determine valid hourly prices
     hourly_prices_valid = []
@@ -140,7 +138,7 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
             hourly_prices_valid.append(p)
 
     # Check if a sufficient amount of hours exists for the ready by time to be honored
-    if len(hourly_prices_valid) < math.ceil(hours_required_to_charge):
+    if len(hourly_prices_valid) < math.ceil(energy_need.hours_required):
         return ChargingRequestResponse(False, reason="Not enough time to charge to the requested level", plan=None)
 
     # Compute signals that define potential starting strategies
