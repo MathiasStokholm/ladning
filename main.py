@@ -34,6 +34,7 @@ class ApplicationState:
         self._charger: Optional[Charger] = None
         self._event_loop = asyncio.get_running_loop()
         self._charging_request: ChargingRequest = ApplicationState.DEFAULT_CHARGING_REQUEST
+        self._charging_state: Optional[str] = None
 
     async def get_charger(self) -> Charger:
         if self._charger is None:
@@ -52,6 +53,8 @@ class ApplicationState:
 
     async def smart_charge(self) -> None:
         async for previous_state, new_state in listen_for_charging_states(self._easee, await self.get_charger()):
+            self._charging_state = new_state
+
             if new_state == "DISCONNECTED":
                 # If vehicle was disconnected, cancel any existing charging plan
                 log.info("Vehicle disconnected - cancelling charging plan")
@@ -87,6 +90,9 @@ class ApplicationState:
             if self._charging_request.ready_by < dt.datetime.now().astimezone():
                 log.info(f"Resetting old charging request")
                 self._charging_request = ApplicationState.DEFAULT_CHARGING_REQUEST
+
+        log.info(f"Planning charging from {self._vehicle_charge_state.battery_level}% with "
+                 f"request: {self._charging_request}")
 
         result = create_charging_plan(self._vehicle_charge_state, self._hourly_prices,
                                       self._charging_request, self.FULL_CHARGE_SAFETY_MARGIN_MINUTES)
@@ -138,6 +144,12 @@ class ApplicationState:
             return
 
         log.info(f"New hourly prices: {hourly_prices}")
+
+        # if vehicle is currently charging, get the SoC before attempting to re-plan charging
+        if self._charging_state == "CHARGING":
+            log.info("Vehicle is currently charging - getting revised state of charge before planning")
+            self._vehicle_charge_state = get_vehicle_charge_state(self._tesla, allow_wakeup=True)
+
         log.info("Checking if charging plan should be revised")
         self._hourly_prices = hourly_prices
         await self.plan_charging()
@@ -172,7 +184,7 @@ async def listen_for_charging_states(easee: Easee, charger: Charger) -> AsyncIte
     yield None, current_charging_state
 
     async def _signalr_callback(_, __, data_id, value):
-        if pyeasee.ChargerStreamData(data_id) == pyeasee.ChargerStreamData.state_chargerOpMode:
+        if data_id == pyeasee.ChargerStreamData.state_chargerOpMode.value:
             new_charging_state = CHARGER_STATUS[value]
 
             nonlocal current_charging_state
