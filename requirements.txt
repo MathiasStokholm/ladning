@@ -1,4 +1,4 @@
-pyeasee==0.8.1
+pyeasee==0.8.4
 teslapy==2.9.0
 flask==3.0.3
 flask-cors==4.0.1
