@@ -61,11 +61,23 @@ class ApplicationState:
                 self._vehicle_charge_state = None
                 continue
             if new_state == "COMPLETED":
-                # If charging was completed, simply
+                # Car has signalled that it is at 100%, so complete charging and wait for car to be plugged in again
                 log.info("Charging completed")
-                await self.complete_charging()
+                self.complete_charging()
                 self._vehicle_charge_state = None
                 continue
+            if new_state == "AWAITING_START" and previous_state == "CHARGING" and self._charging_plan is not None:
+                # Planned charging to less than 100% may just have finished - check if times align to make sure
+                now = dt.datetime.now().astimezone()
+                if abs(now - self._charging_plan.end_time) < dt.timedelta(minutes=10):
+                    log.info(f"Charging to {self._charging_plan.battery_end} % "
+                             f"completed at {now} (expected {self._charging_plan.end_time})")
+
+                    # Reset charging request (e.g. to allow charging to 100 % with no deadline)
+                    # Then try to schedule charging again with the reset plan
+                    self.complete_charging()
+                    self._vehicle_charge_state = get_vehicle_charge_state(self._tesla, allow_wakeup=True)
+                    await self.plan_charging()
 
             # If previous state was None (app just started) or disconnected, consider whether to perform planning
             app_just_launched = previous_state is None
@@ -126,7 +138,7 @@ class ApplicationState:
         log.info(f"Resetting charging request due to cancelled charging")
         self._charging_request = ApplicationState.DEFAULT_CHARGING_REQUEST
 
-    async def complete_charging(self) -> None:
+    def complete_charging(self) -> None:
         """
         Mark the current charging plan as completed
         Note: This will not cancel the plan
