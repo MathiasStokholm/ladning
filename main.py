@@ -23,7 +23,6 @@ from ladning.webservice import LadningService
 
 class ApplicationState:
     DEFAULT_CHARGING_REQUEST = ChargingRequest(battery_target=100, ready_by=None)
-    FULL_CHARGE_SAFETY_MARGIN_MINUTES = 15
 
     def __init__(self, easee: Easee, tesla: teslapy.Tesla, hourly_prices: List[HourlyPrice]) -> None:
         self._easee = easee
@@ -94,8 +93,7 @@ class ApplicationState:
         log.info(f"Planning charging from {self._vehicle_charge_state.battery_level}% with "
                  f"request: {self._charging_request}")
 
-        result = create_charging_plan(self._vehicle_charge_state, self._hourly_prices,
-                                      self._charging_request, self.FULL_CHARGE_SAFETY_MARGIN_MINUTES)
+        result = create_charging_plan(self._vehicle_charge_state, self._hourly_prices, self._charging_request)
         if not result.success:
             log.info(f"Charging plan unsuccessful: {result.reason}")
             return result

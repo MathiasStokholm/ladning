@@ -76,15 +76,12 @@ def estimate_added_range(battery_state: int, target_state: int) -> float:
     return range_per_percentage * battery_diff
 
 
-def calculate_energy_need(battery_state: int, target_state: int,
-                          full_charge_safety_margin_minutes: int = 0) -> Optional[EnergyNeed]:
+def calculate_energy_need(battery_state: int, target_state: int) -> Optional[EnergyNeed]:
     """
     Calculate the energy need required to charge from one battery state to the target battery state
 
     :param battery_state: The starting battery state in the range [0, 100]
     :param target_state: The target battery state in the range [0, 100]
-    :param full_charge_safety_margin_minutes: Additional number of minutes to add as a safety margin when charging to
-    100%
     :return: The energy need object, or None if no charging is required
     """
     if battery_state < 0 or battery_state > 100:
@@ -134,17 +131,11 @@ def calculate_energy_need(battery_state: int, target_state: int,
         if fractional_hour_from_95 > 0.0:
             energy_signal.append(CHARGING_KW_END * fractional_hour_from_95)
 
-    # Add safety margin if applicable
-    if target_state == 100 and full_charge_safety_margin_minutes > 0:
-        hours_required += full_charge_safety_margin_minutes / 60.0
-        energy_signal.extend([0])  # TODO: FIX THIS
-
     return EnergyNeed(energy_signal=energy_signal, hours_required=hours_required)
 
 
 def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices: List[HourlyPrice],
-                         charging_request: ChargingRequest,
-                         full_charge_safety_margin_minutes: int = 0) -> ChargingRequestResponse:
+                         charging_request: ChargingRequest) -> ChargingRequestResponse:
     # Check if charging is needed at all
     if not vehicle_charge_state.battery_level < charging_request.battery_target:
         return ChargingRequestResponse(False, reason="Vehicle battery level already at or above target", plan=None)
@@ -153,9 +144,7 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
         raise RuntimeError("Empty list of hourly prices, cannot create charging plan")
 
     # Charging is needed - calculate plan
-    maybe_energy_need = calculate_energy_need(vehicle_charge_state.battery_level,
-                                              charging_request.battery_target,
-                                              full_charge_safety_margin_minutes)
+    maybe_energy_need = calculate_energy_need(vehicle_charge_state.battery_level, charging_request.battery_target)
     if maybe_energy_need is None:
         return ChargingRequestResponse(False, reason="Vehicle battery level already at or above target", plan=None)
     energy_need = maybe_energy_need
