@@ -201,9 +201,13 @@ async def schedule_charge(charger: Charger, charging_plan: ChargingPlan) -> None
         # Convert to UTC - required by Easee API
         return d.astimezone(dt.timezone.utc).isoformat(timespec='milliseconds').replace("+00:00", "Z")
 
+    # If charging to full, leave out end time to let car decide when it is exactly 100 %
+    # This helps account for differences between the modelled charging curve and the actual curve, e.g. due to battery
+    # temperature, etc.
+    charge_stop_time = None if charging_plan.battery_end == 100 else _format(charging_plan.end_time)
     response = await charger.set_basic_charge_plan(id=42,  # Unsure what ID to use here
                                                    chargeStartTime=_format(charging_plan.start_time),
-                                                   chargeStopTime=_format(charging_plan.end_time),
+                                                   chargeStopTime=charge_stop_time,
                                                    repeat=False,
                                                    isEnabled=True)
     if not response.ok:
