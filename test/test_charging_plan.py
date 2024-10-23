@@ -172,7 +172,7 @@ def test_create_charging_plan_no_hours(vehicle_50_percent: VehicleChargeState) -
 def test_create_charging_plan_ready_by(vehicle_50_percent: VehicleChargeState) -> None:
     start_time = dt.datetime.now().astimezone()
     hourly_prices: List[HourlyPrice] = [
-        HourlyPrice(start=start_time + dt.timedelta(hours=i), price_kwh_dkk=2.0, co2_emission=None)
+        HourlyPrice(start=start_time + dt.timedelta(hours=i), price_kwh_dkk=2.0)
         for i in range(24)
     ]
 
@@ -194,16 +194,16 @@ def test_create_charging_plan_immediate_start(vehicle_90_percent: VehicleChargeS
     five_minutes_ago = dt.datetime.now().astimezone() - dt.timedelta(minutes=5)
     hourly_prices: List[HourlyPrice] = [
         # Make some hours in the past the cheapest
-        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=5), price_kwh_dkk=0.1, co2_emission=None),
-        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=4), price_kwh_dkk=0.1, co2_emission=None),
-        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=3), price_kwh_dkk=0.1, co2_emission=None),
-        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=2), price_kwh_dkk=1.0, co2_emission=None),
-        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=1), price_kwh_dkk=1.0, co2_emission=None),
+        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=5), price_kwh_dkk=0.1),
+        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=4), price_kwh_dkk=0.1),
+        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=3), price_kwh_dkk=0.1),
+        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=2), price_kwh_dkk=1.0),
+        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=1), price_kwh_dkk=1.0),
         # Make the hour that started 5 minutes ago the next best selection
-        HourlyPrice(start=five_minutes_ago, price_kwh_dkk=0.5, co2_emission=None),
-        HourlyPrice(start=five_minutes_ago + dt.timedelta(hours=1), price_kwh_dkk=1.0, co2_emission=None),
-        HourlyPrice(start=five_minutes_ago + dt.timedelta(hours=2), price_kwh_dkk=1.0, co2_emission=None),
-        HourlyPrice(start=five_minutes_ago + dt.timedelta(hours=3), price_kwh_dkk=1.0, co2_emission=None),
+        HourlyPrice(start=five_minutes_ago, price_kwh_dkk=0.5),
+        HourlyPrice(start=five_minutes_ago + dt.timedelta(hours=1), price_kwh_dkk=1.0),
+        HourlyPrice(start=five_minutes_ago + dt.timedelta(hours=2), price_kwh_dkk=1.0),
+        HourlyPrice(start=five_minutes_ago + dt.timedelta(hours=3), price_kwh_dkk=1.0),
     ]
 
     result = create_charging_plan(vehicle_90_percent, hourly_prices, ChargingRequest(battery_target=100, ready_by=None))
@@ -223,12 +223,12 @@ def test_create_charging_plan_early_partial_start() -> None:
     now = dt.datetime.now().astimezone()
     hourly_prices: List[HourlyPrice] = [
         # Make some hours in the past the cheapest
-        HourlyPrice(start=now + dt.timedelta(hours=1), price_kwh_dkk=2, co2_emission=None),
-        HourlyPrice(start=now + dt.timedelta(hours=2), price_kwh_dkk=1.4, co2_emission=None),
-        HourlyPrice(start=now + dt.timedelta(hours=3), price_kwh_dkk=1.1, co2_emission=None),
-        HourlyPrice(start=now + dt.timedelta(hours=4), price_kwh_dkk=1.91, co2_emission=None),
-        HourlyPrice(start=now + dt.timedelta(hours=5), price_kwh_dkk=2, co2_emission=None),
-        HourlyPrice(start=now + dt.timedelta(hours=6), price_kwh_dkk=2, co2_emission=None),
+        HourlyPrice(start=now + dt.timedelta(hours=1), price_kwh_dkk=2),
+        HourlyPrice(start=now + dt.timedelta(hours=2), price_kwh_dkk=1.4),
+        HourlyPrice(start=now + dt.timedelta(hours=3), price_kwh_dkk=1.1),
+        HourlyPrice(start=now + dt.timedelta(hours=4), price_kwh_dkk=1.91),
+        HourlyPrice(start=now + dt.timedelta(hours=5), price_kwh_dkk=2),
+        HourlyPrice(start=now + dt.timedelta(hours=6), price_kwh_dkk=2),
     ]
     result = create_charging_plan(vehicle_state, hourly_prices, ChargingRequest(battery_target=100, ready_by=None))
     assert result.success

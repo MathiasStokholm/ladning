@@ -18,8 +18,8 @@ HOST_ADDRESS = "127.0.0.1"  # This has to be an IPv4 address for webservice to n
 def hourly_price_getter() -> Callable[[], List[HourlyPrice]]:
     def _func():
         return [
-            HourlyPrice(dt.datetime.now().astimezone(), 1.32, 50),
-            HourlyPrice(dt.datetime.now().astimezone() + dt.timedelta(hours=1), 2.5, None),
+            HourlyPrice(dt.datetime.now().astimezone(), 1.32),
+            HourlyPrice(dt.datetime.now().astimezone() + dt.timedelta(hours=1), 2.5),
         ]
 
     return _func

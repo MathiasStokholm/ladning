@@ -6,7 +6,6 @@ def test_get_energy_prices() -> None:
     hourly_prices = get_energy_prices()
     assert len(hourly_prices) > 0
     for hourly_price in hourly_prices:
-        assert hourly_price.co2_emission > 0
         assert hourly_price.price_kwh_dkk > 0
 
     # Check that earliest time is before now and later dates are after now

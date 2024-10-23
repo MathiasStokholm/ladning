@@ -14,7 +14,6 @@ class VehicleChargeState:
 class HourlyPrice:
     start: dt.datetime
     price_kwh_dkk: float
-    co2_emission: Optional[float]
 
 
 @dataclasses.dataclass

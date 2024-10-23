@@ -25,15 +25,14 @@ def get_energy_prices() -> List[HourlyPrice]:
     date_start_str = dt.datetime.now().astimezone().strftime("%Y-%m-%dT%H:00")
     date_end_str = next_datetime_at_hour(dt.datetime.now() + dt.timedelta(days=1), hour=23,
                                          minutes=59).astimezone().strftime("%Y-%m-%dT%H:%M")
-    url = f"{endpoint}?region={price_area}&co2=1&start={date_start_str}&end={date_end_str}"
+    url = f"{endpoint}?region={price_area}&start={date_start_str}&end={date_end_str}"
     records = requests.get(url).json()["data"]
 
     def _convert(record: Dict[str, Any]) -> HourlyPrice:
         start = (dt.datetime.strptime(record["date"], "%Y-%m-%d") +
                  dt.timedelta(hours=record["hour"])).astimezone()
         price_kwh_dkk = float(record["price"])
-        co2_emission = record["co2"]["average"]
-        return HourlyPrice(start=start, price_kwh_dkk=price_kwh_dkk, co2_emission=co2_emission)
+        return HourlyPrice(start=start, price_kwh_dkk=price_kwh_dkk)
 
     # Sort hourly prices by datetime (first entry is closest to current time)
     hourly_prices = sorted([_convert(r) for r in records], key=lambda p: p.start)
