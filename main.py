@@ -22,9 +22,8 @@ from ladning.webservice import LadningService
 
 
 class ApplicationState:
-    DEFAULT_CHARGING_REQUEST = ChargingRequest(battery_target=100, ready_by=None)
-
-    def __init__(self, easee: Easee, tesla: teslapy.Tesla, hourly_prices: List[HourlyPrice]) -> None:
+    def __init__(self, easee: Easee, tesla: teslapy.Tesla, hourly_prices: List[HourlyPrice],
+                 max_average_price_default: Optional[float]) -> None:
         self._easee = easee
         self._tesla = tesla
         self._hourly_prices = hourly_prices
@@ -32,7 +31,9 @@ class ApplicationState:
         self._charging_plan: Optional[ChargingPlan] = None
         self._charger: Optional[Charger] = None
         self._event_loop = asyncio.get_running_loop()
-        self._charging_request: ChargingRequest = ApplicationState.DEFAULT_CHARGING_REQUEST
+        self._default_charging_request: ChargingRequest = ChargingRequest(battery_target=100, ready_by=None,
+                                                                          max_average_price_dkk_kwh=max_average_price_default)
+        self._charging_request: ChargingRequest = self._default_charging_request
         self._charging_state: Optional[str] = None
 
     async def get_charger(self) -> Charger:
@@ -100,7 +101,7 @@ class ApplicationState:
         if self._charging_request.ready_by is not None:
             if self._charging_request.ready_by < dt.datetime.now().astimezone():
                 log.info(f"Resetting old charging request")
-                self._charging_request = ApplicationState.DEFAULT_CHARGING_REQUEST
+                self._charging_request = self._default_charging_request
 
         log.info(f"Planning charging from {self._vehicle_charge_state.battery_level}% with "
                  f"request: {self._charging_request}")
@@ -136,7 +137,7 @@ class ApplicationState:
 
         # Reset charging request
         log.info(f"Resetting charging request due to cancelled charging")
-        self._charging_request = ApplicationState.DEFAULT_CHARGING_REQUEST
+        self._charging_request = self._default_charging_request
 
     def complete_charging(self) -> None:
         """
@@ -145,7 +146,7 @@ class ApplicationState:
         """
         self._charging_plan = None
         log.info(f"Resetting charging request due to completed charging")
-        self._charging_request = ApplicationState.DEFAULT_CHARGING_REQUEST
+        self._charging_request = self._default_charging_request
 
     async def on_new_hourly_prices(self, hourly_prices: List[HourlyPrice]) -> None:
         log.info("New hourly prices received")
@@ -174,7 +175,7 @@ class ApplicationState:
 
         # On failure, revert to default charging request
         if not result.success:
-            self._charging_request = ApplicationState.DEFAULT_CHARGING_REQUEST
+            self._charging_request = self._default_charging_request
         return result
 
     def on_charging_request_sync(self, request: ChargingRequest) -> ChargingRequestResponse:
@@ -232,6 +233,8 @@ async def main():
     parser.add_argument("--easee_username", help="The Easee username to use", required=True)
     parser.add_argument("--easee_password", help="The Easee password to use", required=True)
     parser.add_argument("--webservice_port", help="The port to use for the webservice", default=5042)
+    parser.add_argument("--max_average_price_default", help="The maximum average price per kWh in DKK to allow",
+                        default=2.0)
     args = parser.parse_args()
 
     # Connect to Easee charger and log in
@@ -241,7 +244,7 @@ async def main():
     tesla = teslapy.Tesla(args.tesla_username)
 
     # Create application state to tie together different pieces of the app
-    state = ApplicationState(easee, tesla, get_energy_prices())
+    state = ApplicationState(easee, tesla, get_energy_prices(), args.max_average_price_default)
 
     # Start the webservice used to query and control charging on a worker thread
     webservice = LadningService(host="0.0.0.0", port=args.webservice_port,

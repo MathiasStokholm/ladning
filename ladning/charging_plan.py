@@ -175,6 +175,15 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
     # Estimate the added range in km
     range_added = estimate_added_range(vehicle_charge_state.battery_level, charging_request.battery_target)
 
+    # Check if price is lower than requested limit on average
+    if charging_request.max_average_price_dkk_kwh is not None:
+        total_cost = min(min(full_hour_total_prices), min(partial_hour_total_prices))
+        average_cost_per_kwh = total_cost / sum(partial_hour_energy_need.energy_signal) + TAX_REFUND_DKK_KWH
+        if average_cost_per_kwh > charging_request.max_average_price_dkk_kwh:
+            return ChargingRequestResponse(success=False,
+                                           reason=f"Average cost per kwh ({average_cost_per_kwh} DKK/kWh) was higher than requested limit: {charging_request.max_average_price_dkk_kwh} DKK/kWh",
+                                           plan=None)
+
     # Check which hourly strategy yields the lowest total price
     if min(full_hour_total_prices) <= min(partial_hour_total_prices):
         # Full hour strategy works best

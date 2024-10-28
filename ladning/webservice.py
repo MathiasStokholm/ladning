@@ -68,8 +68,10 @@ class LadningService:
             ready_by = dt.datetime.fromisoformat(data["ready_by"])
             if ready_by.tzinfo is None:
                 return Response("ready_by datetime must have timezone information")
+            max_average_price_dkk_kwh = data.get("max_average_price_dkk_kwh", None)
             charging_request = ChargingRequest(battery_target=int(data["battery_target"]),
-                                               ready_by=ready_by)
+                                               ready_by=ready_by,
+                                               max_average_price_dkk_kwh=max_average_price_dkk_kwh)
         except ValueError as e:
             return Response(f"Unable to parse request parameters: '{e}'", 400)
 
