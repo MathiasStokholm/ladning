@@ -104,7 +104,6 @@ class ApplicationState:
                     if not result.success and new_state == CHARGING:
                         await self._charger.stop()
 
-
     async def plan_charging(self) -> ChargingRequestResponse:
         if self._vehicle_charge_state is None:
             log.info("Skipping planning due to no vehicle charge state information")
@@ -242,12 +241,12 @@ async def schedule_charge(charger: Charger, charging_plan: ChargingPlan) -> None
 
 async def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tesla_username", help="The Tesla username to use", required=True)
-    parser.add_argument("--easee_username", help="The Easee username to use", required=True)
-    parser.add_argument("--easee_password", help="The Easee password to use", required=True)
-    parser.add_argument("--webservice_port", help="The port to use for the webservice", default=5042)
+    parser.add_argument("--tesla_username", help="The Tesla username to use", required=True, type=str)
+    parser.add_argument("--easee_username", help="The Easee username to use", required=True, type=str)
+    parser.add_argument("--easee_password", help="The Easee password to use", required=True, type=str)
+    parser.add_argument("--webservice_port", help="The port to use for the webservice", default=5042, type=int)
     parser.add_argument("--max_average_price_default", help="The maximum average price per kWh in DKK to allow",
-                        default=2.0)
+                        default=1.6, type=float)
     args = parser.parse_args()
 
     # Connect to Easee charger and log in
