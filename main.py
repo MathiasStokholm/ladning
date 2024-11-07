@@ -20,6 +20,13 @@ from ladning.vehicle_query import get_vehicle_charge_state
 
 from ladning.webservice import LadningService
 
+# Charging states
+READY_TO_CHARGE = "READY_TO_CHARGE"
+CHARGING = "CHARGING"
+AWAITING_START = "AWAITING_START"
+COMPLETED = "COMPLETED"
+DISCONNECTED = "DISCONNECTED"
+
 
 class ApplicationState:
     def __init__(self, easee: Easee, tesla: teslapy.Tesla, hourly_prices: List[HourlyPrice],
@@ -55,19 +62,19 @@ class ApplicationState:
         async for previous_state, new_state in listen_for_charging_states(self._easee, await self.get_charger()):
             self._charging_state = new_state
 
-            if new_state == "DISCONNECTED":
+            if new_state == DISCONNECTED:
                 # If vehicle was disconnected, cancel any existing charging plan
                 log.info("Vehicle disconnected - cancelling charging plan")
                 await self.cancel_charging()
                 self._vehicle_charge_state = None
                 continue
-            if new_state == "COMPLETED":
+            if new_state == COMPLETED:
                 # Car has signalled that it is at 100%, so complete charging and wait for car to be plugged in again
                 log.info("Charging completed")
                 self.complete_charging()
                 self._vehicle_charge_state = None
                 continue
-            if new_state == "AWAITING_START" and previous_state == "CHARGING" and self._charging_plan is not None:
+            if new_state == AWAITING_START and previous_state == CHARGING and self._charging_plan is not None:
                 # Planned charging to less than 100% may just have finished - check if times align to make sure
                 now = dt.datetime.now().astimezone()
                 if abs(now - self._charging_plan.end_time) < dt.timedelta(minutes=10):
@@ -82,15 +89,21 @@ class ApplicationState:
 
             # If previous state was None (app just started) or disconnected, consider whether to perform planning
             app_just_launched = previous_state is None
-            if app_just_launched or previous_state == "DISCONNECTED":
+            if app_just_launched or previous_state == DISCONNECTED:
                 # Plan if charger is ready to charge, awaiting a schedule or already started charging
-                perform_planning = new_state == "READY_TO_CHARGE" or \
-                                   new_state == "AWAITING_START" or \
-                                   new_state == "CHARGING"
+                perform_planning = new_state == READY_TO_CHARGE or \
+                                   new_state == AWAITING_START or \
+                                   new_state == CHARGING
 
                 if perform_planning:
                     self._vehicle_charge_state = get_vehicle_charge_state(self._tesla, allow_wakeup=True)
-                    await self.plan_charging()
+                    result = await self.plan_charging()
+
+                    # In the case where the new state is charging and planning failed (e.g. due to too high an average
+                    # cost, simply stop the charging to wait for new hourly prices)
+                    if not result.success and new_state == CHARGING:
+                        await self._charger.stop()
+
 
     async def plan_charging(self) -> ChargingRequestResponse:
         if self._vehicle_charge_state is None:
