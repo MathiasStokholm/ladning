@@ -68,9 +68,8 @@ class LadningService:
             ready_by = dt.datetime.fromisoformat(data["ready_by"])
             if ready_by.tzinfo is None:
                 return Response("ready_by datetime must have timezone information")
-            max_average_price_dkk_kwh = data.get("max_average_price_dkk_kwh", None)
             max_average_price_dkk_kwh = float(data["max_average_price_dkk_kwh"]) \
-                    if "max_average_price_dkk_kwh" else None
+                    if "max_average_price_dkk_kwh" in data else None
             charging_request = ChargingRequest(battery_target=int(data["battery_target"]),
                                                ready_by=ready_by,
                                                max_average_price_dkk_kwh=max_average_price_dkk_kwh)
