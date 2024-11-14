@@ -99,15 +99,10 @@ class ApplicationState:
                     self._vehicle_charge_state = get_vehicle_charge_state(self._tesla, allow_wakeup=True)
                     result = await self.plan_charging()
 
-                    # In the case where planning failed (e.g. due to too high an average
-                    # cost, simply stop the charging to wait for new hourly prices)
-                    if not result.success:
-                        log.info("Stopping charging  in 10 seconds to await better charging conditions")
-                        # Sleep for a bit to ensure that charger has moved through all applicable states
-                        # before we try to stop it. This is needed since the charger only responds to the 'stop'
-                        # if it has begun charging
-                        await asyncio.sleep(10)
-                        await self._charger.pause()
+            # If no charging plan exists (e.g. due to too high an average cost) prevent charging by pausing
+            if not app_just_launched and new_state == CHARGING and self._charging_plan is None:
+                log.info("Stopping charging to await better charging conditions")
+                await self._charger.pause()
 
     async def plan_charging(self) -> ChargingRequestResponse:
         if self._vehicle_charge_state is None:
