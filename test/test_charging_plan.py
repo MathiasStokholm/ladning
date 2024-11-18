@@ -20,7 +20,7 @@ def vehicle_90_percent() -> VehicleChargeState:
     return VehicleChargeState(battery_level=90, range_km=350, minutes_to_full_charge=0)
 
 
-def vehicle_charge_state_required_for_charging_duration_to_full(hours_of_charging: float)\
+def vehicle_charge_state_required_for_charging_duration_to_full(hours_of_charging: float) \
         -> VehicleChargeState:
     """
     This is essentially the inverse of calculate_hours_required_to_charge()
@@ -166,7 +166,8 @@ def test_calculate_energy_need_to_full() -> None:
 def test_create_charging_plan_no_hours(vehicle_50_percent: VehicleChargeState) -> None:
     with pytest.raises(RuntimeError):
         create_charging_plan(vehicle_charge_state=vehicle_50_percent, hourly_prices=[],
-                             charging_request=ChargingRequest(battery_target=100, ready_by=None))
+                             charging_request=ChargingRequest(battery_target=100, ready_by=None,
+                                                              max_average_price_dkk_kwh=2.0))
 
 
 def test_create_charging_plan_ready_by(vehicle_50_percent: VehicleChargeState) -> None:
@@ -181,7 +182,8 @@ def test_create_charging_plan_ready_by(vehicle_50_percent: VehicleChargeState) -
     hourly_prices[14].price_kwh_dkk = 1.3
     hourly_prices[15].price_kwh_dkk = 1.1
     result = create_charging_plan(vehicle_50_percent, hourly_prices,
-                                  ChargingRequest(battery_target=100, ready_by=hourly_prices[14].start))
+                                  ChargingRequest(battery_target=100, ready_by=hourly_prices[14].start,
+                                                  max_average_price_dkk_kwh=2.0))
     assert result.success
     assert result.plan is not None
     assert result.plan.end_time <= hourly_prices[14].start
@@ -206,7 +208,8 @@ def test_create_charging_plan_immediate_start(vehicle_90_percent: VehicleChargeS
         HourlyPrice(start=five_minutes_ago + dt.timedelta(hours=3), price_kwh_dkk=1.0),
     ]
 
-    result = create_charging_plan(vehicle_90_percent, hourly_prices, ChargingRequest(battery_target=100, ready_by=None))
+    result = create_charging_plan(vehicle_90_percent, hourly_prices,
+                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=2.0))
     assert result.success
     assert result.plan is not None
     assert result.plan.start_time == five_minutes_ago
@@ -230,8 +233,35 @@ def test_create_charging_plan_early_partial_start() -> None:
         HourlyPrice(start=now + dt.timedelta(hours=5), price_kwh_dkk=2),
         HourlyPrice(start=now + dt.timedelta(hours=6), price_kwh_dkk=2),
     ]
-    result = create_charging_plan(vehicle_state, hourly_prices, ChargingRequest(battery_target=100, ready_by=None))
+    result = create_charging_plan(vehicle_state, hourly_prices,
+                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=2.0))
     assert result.success
     assert result.plan is not None
     assert hourly_prices[1].start < result.plan.start_time < hourly_prices[2].start
     # Note: Rounding errors mean that we cannot check the start time precisely here
+
+
+def test_create_charging_plan_max_price() -> None:
+    """
+    Test that charging plan creation fails if price is higher than maximum requested value
+    """
+    # Assume that charging will take almost two hours
+    vehicle_state = vehicle_charge_state_required_for_charging_duration_to_full(2.0)
+    now = dt.datetime.now().astimezone()
+    hourly_prices: List[HourlyPrice] = [
+        HourlyPrice(start=now + dt.timedelta(hours=1), price_kwh_dkk=1.0),
+        HourlyPrice(start=now + dt.timedelta(hours=2), price_kwh_dkk=2.0),
+    ]
+
+    # Plan should succeed if maximum average price is higher than actual average price or if argument is left out
+    result = create_charging_plan(vehicle_state, hourly_prices,
+                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=1.51))
+    assert result.success
+    result = create_charging_plan(vehicle_state, hourly_prices,
+                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=None))
+    assert result.success
+
+    # Plan should fail if maximum average price is lower than actual average price
+    result = create_charging_plan(vehicle_state, hourly_prices,
+                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=1.45))
+    assert not result.success
