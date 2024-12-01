@@ -113,6 +113,14 @@ def test_shift_fractional_forward() -> None:
     assert shifted_need.energy_signal[2] == pytest.approx(10.6)
     assert sum(shifted_need.energy_signal) == pytest.approx(sum(energy_need.energy_signal))
 
+def test_shift_fractional_forward_single_hour() -> None:
+    """
+    When shifting an EnergyNeed of less than one hour, simple return as is
+    """
+    energy_need = EnergyNeed([10.6 * 0.5], 0.5)
+    shifted_need = shift_fractional_forward(energy_need)
+    assert shifted_need == energy_need
+
 
 def test_calculate_energy_need_invalid_inputs() -> None:
     # Target state less than current battery state
@@ -265,3 +273,23 @@ def test_create_charging_plan_max_price() -> None:
     result = create_charging_plan(vehicle_state, hourly_prices,
                                   ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=1.45))
     assert not result.success
+
+def test_create_charging_plan_less_than_one_hour() -> None:
+    """
+    Test that charging plan creation favors started from the beginning of the cheapest hour when charging is expected to
+    take less than one hour
+    """
+    vehicle_state = vehicle_charge_state_required_for_charging_duration_to_full(0.5)
+    now = dt.datetime.now().astimezone()
+    hourly_prices: List[HourlyPrice] = [
+        HourlyPrice(start=now + dt.timedelta(hours=1), price_kwh_dkk=2),
+        HourlyPrice(start=now + dt.timedelta(hours=2), price_kwh_dkk=1.4),
+        HourlyPrice(start=now + dt.timedelta(hours=4), price_kwh_dkk=2),
+    ]
+    result = create_charging_plan(vehicle_state, hourly_prices,
+                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=1.8))
+
+    # Plan should start exactly when the cheapest hour begins
+    assert result.success
+    assert result.plan is not None
+    assert result.plan.start_time == hourly_prices[1].start

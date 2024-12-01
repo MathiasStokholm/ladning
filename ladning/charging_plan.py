@@ -49,6 +49,10 @@ def shift_fractional_forward(energy_need: EnergyNeed) -> EnergyNeed:
     :param energy_need: The energy need to shift
     :return: The shifted energy need
     """
+    # If signal is less than one hour, there is nothing to shift
+    if energy_need.hours_required < 1.0:
+        return energy_need
+
     fractional_hour, full_hours = math.modf(energy_need.hours_required)
     shift = energy_need.energy_signal[0] * fractional_hour
     new_energy_signal = [shift]
