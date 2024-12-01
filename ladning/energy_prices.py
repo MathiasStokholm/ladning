@@ -23,9 +23,7 @@ def get_energy_prices() -> List[HourlyPrice]:
     endpoint = "https://api.bolius.dk/livedata/v2/type/power"
     price_area = "DK2"  # Price area for Sealand and Copenhagen
     date_start_str = dt.datetime.now().astimezone().strftime("%Y-%m-%dT%H:00")
-    date_end_str = next_datetime_at_hour(dt.datetime.now() + dt.timedelta(days=1), hour=23,
-                                         minutes=59).astimezone().strftime("%Y-%m-%dT%H:%M")
-    url = f"{endpoint}?region={price_area}&start={date_start_str}&end={date_end_str}"
+    url = f"{endpoint}?region={price_area}&start={date_start_str}"
     records = requests.get(url).json()["data"]
 
     def _convert(record: Dict[str, Any]) -> HourlyPrice:
