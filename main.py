@@ -97,7 +97,7 @@ class ApplicationState:
 
                 if perform_planning:
                     self._vehicle_charge_state = get_vehicle_charge_state(self._tesla, allow_wakeup=True)
-                    result = await self.plan_charging()
+                    await self.plan_charging()
 
             # If no charging plan exists (e.g. due to too high an average cost) prevent charging by pausing
             if not app_just_launched and new_state == CHARGING and self._charging_plan is None:
