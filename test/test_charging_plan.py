@@ -12,12 +12,12 @@ from ladning.types import VehicleChargeState, HourlyPrice, ChargingRequest, Ener
 
 @pytest.fixture()
 def vehicle_50_percent() -> VehicleChargeState:
-    return VehicleChargeState(battery_level=50, range_km=200, minutes_to_full_charge=0)
+    return VehicleChargeState(battery_level=50)
 
 
 @pytest.fixture()
 def vehicle_90_percent() -> VehicleChargeState:
-    return VehicleChargeState(battery_level=90, range_km=350, minutes_to_full_charge=0)
+    return VehicleChargeState(battery_level=90)
 
 
 def vehicle_charge_state_required_for_charging_duration_to_full(hours_of_charging: float) \
@@ -36,7 +36,7 @@ def vehicle_charge_state_required_for_charging_duration_to_full(hours_of_chargin
         battery_state = 95
         additional_hours = hours_of_charging - hours_required_from_95_percent
         battery_state -= int(additional_hours * CHARGING_KW_MAX / BATTERY_CAPACITY_KWH * 100.0)
-    return VehicleChargeState(battery_state, 350, 0)
+    return VehicleChargeState(battery_state)
 
 
 def test_argmin() -> None:

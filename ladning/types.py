@@ -6,8 +6,6 @@ from typing import Optional, List
 @dataclasses.dataclass
 class VehicleChargeState:
     battery_level: int
-    range_km: float
-    minutes_to_full_charge: int
 
 
 @dataclasses.dataclass
