@@ -62,6 +62,7 @@ def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Hour
     """
 
     def success(req: ChargingRequest) -> ChargingRequestResponse:
+        assert req.charge_immediately == True
         return ChargingRequestResponse(success=True, reason="",
                                        plan=ChargingPlan(dt.datetime.now().astimezone(),
                                                          dt.datetime.now().astimezone() + dt.timedelta(hours=5),
@@ -73,7 +74,8 @@ def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Hour
         return ChargingRequestResponse(success=False, reason="It failed!", plan=None)
 
     request_data = dict(battery_target=100,
-                        ready_by=(dt.datetime.now().astimezone() + dt.timedelta(hours=5)).isoformat())
+                        ready_by=(dt.datetime.now().astimezone() + dt.timedelta(hours=5)).isoformat(),
+                        charge_immediately=True)
     headers = {'Content-type': 'application/json'}
 
     # Test success
