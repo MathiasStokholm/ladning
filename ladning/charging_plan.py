@@ -168,16 +168,31 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
     if len(hourly_prices_valid) < math.ceil(energy_need.hours_required):
         return ChargingRequestResponse(False, reason="Not enough time to charge to the requested level", plan=None)
 
+    # Estimate the added range in km
+    range_added = estimate_added_range(vehicle_charge_state.battery_level, charging_request.battery_target)
+
     # Pick cheapest consecutive hours for charging
     # This yields the total price for starting at time N and finishing the required M hours later
     # Note that the array is shorter than the input array by M due to not being able to sum past the end of the array
     prices_after_refund = [p.price_kwh_dkk - TAX_REFUND_DKK_KWH for p in hourly_prices_valid]
     full_hour_total_prices = convolve_valid(prices_after_refund, energy_need.energy_signal)
+
+    # If requested to charge immediately, simply pick hour 0 as the starting point and compute the rest from there
+    if charging_request.charge_immediately:
+        immediate_price = full_hour_total_prices[0]
+        start_time = hourly_prices_valid[0].start
+        end_time = start_time + dt.timedelta(hours=energy_need.hours_required)
+        return ChargingRequestResponse(success=True, reason="",
+                                       plan=ChargingPlan(start_time=start_time, end_time=end_time,
+                                                         battery_start=vehicle_charge_state.battery_level,
+                                                         battery_end=charging_request.battery_target,
+                                                         total_cost_dkk=immediate_price,
+                                                         range_added_km=range_added
+                                                         ))
+
+
     partial_hour_energy_need = shift_fractional_forward(energy_need)
     partial_hour_total_prices = convolve_valid(prices_after_refund, partial_hour_energy_need.energy_signal)
-
-    # Estimate the added range in km
-    range_added = estimate_added_range(vehicle_charge_state.battery_level, charging_request.battery_target)
 
     # Check if price is lower than requested limit on average
     if charging_request.max_average_price_dkk_kwh is not None:

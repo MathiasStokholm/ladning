@@ -37,6 +37,7 @@ class ChargingRequest:
     battery_target: int  # The battery level to charge to
     ready_by: Optional[dt.datetime]  # The date/time by which the charging should have reached the target battery level
     max_average_price_dkk_kwh: Optional[float]  # The maximum price to pay on average in DKK/kWh before tax reduction
+    charge_immediately: bool = False  # Whether to immediately begin charging, regardless of price
 
 
 @dataclasses.dataclass

@@ -293,3 +293,29 @@ def test_create_charging_plan_less_than_one_hour() -> None:
     assert result.success
     assert result.plan is not None
     assert result.plan.start_time == hourly_prices[1].start
+
+
+def test_create_charging_plan_immediate() -> None:
+    """
+    Test that charging plan creation can create a plan that begins immediately, regardless of price
+    """
+    vehicle_state = vehicle_charge_state_required_for_charging_duration_to_full(hours_of_charging=2.8)
+    now = dt.datetime.now().astimezone()
+    hourly_prices: List[HourlyPrice] = [
+        HourlyPrice(start=now + dt.timedelta(hours=0), price_kwh_dkk=3),
+        HourlyPrice(start=now + dt.timedelta(hours=1), price_kwh_dkk=2),
+        HourlyPrice(start=now + dt.timedelta(hours=2), price_kwh_dkk=1),
+        HourlyPrice(start=now + dt.timedelta(hours=3), price_kwh_dkk=1),
+        HourlyPrice(start=now + dt.timedelta(hours=4), price_kwh_dkk=1),
+    ]
+    result = create_charging_plan(vehicle_state, hourly_prices,
+                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=None,
+                                                  charge_immediately=True))
+
+    # Plan should start exactly when the cheapest hour begins
+    assert result.success
+    assert result.plan is not None
+    assert result.plan.start_time == hourly_prices[0].start
+    assert result.plan.battery_end == 100
+    assert result.plan.end_time > hourly_prices[2].start
+    assert result.plan.end_time < hourly_prices[3].start
