@@ -139,7 +139,8 @@ def calculate_energy_need(battery_state: int, target_state: int) -> Optional[Ene
 
 
 def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices: List[HourlyPrice],
-                         charging_request: ChargingRequest) -> ChargingRequestResponse:
+                         charging_request: ChargingRequest,
+                         current_time: dt.datetime = dt.datetime.now().astimezone()) -> ChargingRequestResponse:
     # Check if charging is needed at all
     if not vehicle_charge_state.battery_level < charging_request.battery_target:
         return ChargingRequestResponse(False, reason="Vehicle battery level already at or above target", plan=None)
@@ -157,7 +158,7 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
     hourly_prices_valid = []
     for p in hourly_prices:
         # Disregard hours fully in the past (ongoing hour is valid) ...
-        valid = p.start >= dt.datetime.now().astimezone() - dt.timedelta(hours=1)
+        valid = p.start >= current_time - dt.timedelta(hours=1)
         # ... and disregard hourly prices later than the charging request's end time if applicable ...
         if charging_request.ready_by is not None:
             valid &= p.start + dt.timedelta(hours=1) <= charging_request.ready_by
@@ -167,6 +168,10 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
     # Check if a sufficient amount of hours exists for the ready by time to be honored
     if len(hourly_prices_valid) < math.ceil(energy_need.hours_required):
         return ChargingRequestResponse(False, reason="Not enough time to charge to the requested level", plan=None)
+
+    # If the first hour has already begun, clamp it to the current time to correctly estimate end of charging
+    if hourly_prices_valid[0].start < current_time:
+        hourly_prices_valid[0].start = current_time
 
     # Estimate the added range in km
     range_added = estimate_added_range(vehicle_charge_state.battery_level, charging_request.battery_target)
@@ -189,7 +194,6 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
                                                          total_cost_dkk=immediate_price,
                                                          range_added_km=range_added
                                                          ))
-
 
     partial_hour_energy_need = shift_fractional_forward(energy_need)
     partial_hour_total_prices = convolve_valid(prices_after_refund, partial_hour_energy_need.energy_signal)
