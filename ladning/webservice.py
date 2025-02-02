@@ -80,11 +80,8 @@ class LadningService:
             # Parse "charge_immediately" field, but default to False if not provided
             charge_immediately: bool = data.get("charge_immediately", False)
 
-            # Parse "battery_target" field if applicable
-            battery_target = data.get("battery_target")
-            if battery_target:
-                battery_target = int(battery_target)
-
+            # Parse "battery_target" field if applicable, but default to 100 if not provided
+            battery_target = int(data.get("battery_target", 100))
             charging_request = ChargingRequest(battery_target=battery_target,
                                                ready_by=ready_by,
                                                max_average_price_dkk_kwh=max_average_price_dkk_kwh,
