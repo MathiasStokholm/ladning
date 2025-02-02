@@ -65,13 +65,27 @@ class LadningService:
         # Convert POST data to Python dataclass
         try:
             data = request.json
-            ready_by = dt.datetime.fromisoformat(data["ready_by"])
-            if ready_by.tzinfo is None:
-                return Response("ready_by datetime must have timezone information")
+
+            # Parse "ready_by" field if applicable
+            ready_by = data.get("ready_by")
+            if ready_by:
+                ready_by = dt.datetime.fromisoformat(ready_by)
+                if ready_by.tzinfo is None:
+                    return Response("ready_by datetime must have timezone information")
+
+            # Parse "max_average_price_dkk_kwh" field if applicable
             max_average_price_dkk_kwh = float(data["max_average_price_dkk_kwh"]) \
                     if "max_average_price_dkk_kwh" in data else None
+
+            # Parse "charge_immediately" field, but default to False if not provided
             charge_immediately: bool = data.get("charge_immediately", False)
-            charging_request = ChargingRequest(battery_target=int(data["battery_target"]),
+
+            # Parse "battery_target" field if applicable
+            battery_target = data.get("battery_target")
+            if battery_target:
+                battery_target = int(battery_target)
+
+            charging_request = ChargingRequest(battery_target=battery_target,
                                                ready_by=ready_by,
                                                max_average_price_dkk_kwh=max_average_price_dkk_kwh,
                                                charge_immediately=charge_immediately)
