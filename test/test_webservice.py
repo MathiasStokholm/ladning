@@ -1,4 +1,3 @@
-import json
 from typing import List, Optional, Callable
 
 import datetime as dt
@@ -63,6 +62,7 @@ def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Hour
     """
 
     def success(req: ChargingRequest) -> ChargingRequestResponse:
+        assert req.charge_immediately == True
         return ChargingRequestResponse(success=True, reason="",
                                        plan=ChargingPlan(dt.datetime.now().astimezone(),
                                                          dt.datetime.now().astimezone() + dt.timedelta(hours=5),
@@ -74,7 +74,8 @@ def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Hour
         return ChargingRequestResponse(success=False, reason="It failed!", plan=None)
 
     request_data = dict(battery_target=100,
-                        ready_by=(dt.datetime.now().astimezone() + dt.timedelta(hours=5)).isoformat())
+                        ready_by=(dt.datetime.now().astimezone() + dt.timedelta(hours=5)).isoformat(),
+                        charge_immediately=True)
     headers = {'Content-type': 'application/json'}
 
     # Test success
@@ -98,3 +99,34 @@ def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Hour
         assert results["success"] is False
         assert results["reason"] == "It failed!"
         assert results["plan"] is None
+
+
+def test_webservice_charge_now(hourly_price_getter: Callable[[], List[HourlyPrice]],
+                                     charging_plan_getter: Callable[[], Optional[ChargingPlan]]) -> None:
+    """
+    Test that the "/charging_request" API endpoint can be called with HTTP POST and that it can handle
+    charge_immediately requests correctly (including the very sparse request)
+    """
+
+    def success(req: ChargingRequest) -> ChargingRequestResponse:
+        assert req.charge_immediately == True
+        return ChargingRequestResponse(success=True, reason="",
+                                       plan=ChargingPlan(dt.datetime.now().astimezone(),
+                                                         dt.datetime.now().astimezone() + dt.timedelta(hours=5),
+                                                         battery_start=50, battery_end=req.battery_target,
+                                                         total_cost_dkk=50.0,
+                                                         range_added_km=210.0))
+
+    request_data = dict(charge_immediately=True)
+    headers = {'Content-type': 'application/json'}
+
+    # Test success
+    with LadningService(host=HOST_ADDRESS, port=FREE_PORT, electricity_price_getter=hourly_price_getter,
+                        charging_plan_getter=charging_plan_getter, charging_request_setter=success) as service:
+        url = f"{service.endpoint}/charging_request"
+        resp = requests.post(url, json=request_data, headers=headers)
+        resp.raise_for_status()
+        results = resp.json()
+        assert results["success"] is True
+        assert results["reason"] == ""
+        assert results["plan"] is not None

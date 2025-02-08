@@ -1,6 +1,5 @@
 import teslapy
 
-from ladning.constants import MILES_TO_KILOMETERS
 from ladning.logging import log
 from ladning.types import VehicleChargeState
 
@@ -18,6 +17,4 @@ def get_vehicle_charge_state(tesla: teslapy.Tesla, allow_wakeup: bool = False) -
             raise RuntimeError("Car is asleep and wakeup wasn't allowed")
     charge_state = vehicle['charge_state']
     battery_level = charge_state['battery_level']
-    range_km = charge_state['battery_range'] * MILES_TO_KILOMETERS
-    minutes_to_full_charge = charge_state['minutes_to_full_charge']
-    return VehicleChargeState(battery_level, range_km, minutes_to_full_charge)
+    return VehicleChargeState(battery_level)

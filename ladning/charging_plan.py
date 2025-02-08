@@ -139,7 +139,8 @@ def calculate_energy_need(battery_state: int, target_state: int) -> Optional[Ene
 
 
 def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices: List[HourlyPrice],
-                         charging_request: ChargingRequest) -> ChargingRequestResponse:
+                         charging_request: ChargingRequest,
+                         current_time: dt.datetime = dt.datetime.now().astimezone()) -> ChargingRequestResponse:
     # Check if charging is needed at all
     if not vehicle_charge_state.battery_level < charging_request.battery_target:
         return ChargingRequestResponse(False, reason="Vehicle battery level already at or above target", plan=None)
@@ -157,7 +158,7 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
     hourly_prices_valid = []
     for p in hourly_prices:
         # Disregard hours fully in the past (ongoing hour is valid) ...
-        valid = p.start >= dt.datetime.now().astimezone() - dt.timedelta(hours=1)
+        valid = p.start >= current_time - dt.timedelta(hours=1)
         # ... and disregard hourly prices later than the charging request's end time if applicable ...
         if charging_request.ready_by is not None:
             valid &= p.start + dt.timedelta(hours=1) <= charging_request.ready_by
@@ -168,16 +169,34 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices
     if len(hourly_prices_valid) < math.ceil(energy_need.hours_required):
         return ChargingRequestResponse(False, reason="Not enough time to charge to the requested level", plan=None)
 
+    # If the first hour has already begun, clamp it to the current time to correctly estimate end of charging
+    if hourly_prices_valid[0].start < current_time:
+        hourly_prices_valid[0].start = current_time
+
+    # Estimate the added range in km
+    range_added = estimate_added_range(vehicle_charge_state.battery_level, charging_request.battery_target)
+
     # Pick cheapest consecutive hours for charging
     # This yields the total price for starting at time N and finishing the required M hours later
     # Note that the array is shorter than the input array by M due to not being able to sum past the end of the array
     prices_after_refund = [p.price_kwh_dkk - TAX_REFUND_DKK_KWH for p in hourly_prices_valid]
     full_hour_total_prices = convolve_valid(prices_after_refund, energy_need.energy_signal)
+
+    # If requested to charge immediately, simply pick hour 0 as the starting point and compute the rest from there
+    if charging_request.charge_immediately:
+        immediate_price = full_hour_total_prices[0]
+        start_time = hourly_prices_valid[0].start
+        end_time = start_time + dt.timedelta(hours=energy_need.hours_required)
+        return ChargingRequestResponse(success=True, reason="",
+                                       plan=ChargingPlan(start_time=start_time, end_time=end_time,
+                                                         battery_start=vehicle_charge_state.battery_level,
+                                                         battery_end=charging_request.battery_target,
+                                                         total_cost_dkk=immediate_price,
+                                                         range_added_km=range_added
+                                                         ))
+
     partial_hour_energy_need = shift_fractional_forward(energy_need)
     partial_hour_total_prices = convolve_valid(prices_after_refund, partial_hour_energy_need.energy_signal)
-
-    # Estimate the added range in km
-    range_added = estimate_added_range(vehicle_charge_state.battery_level, charging_request.battery_target)
 
     # Check if price is lower than requested limit on average
     if charging_request.max_average_price_dkk_kwh is not None:

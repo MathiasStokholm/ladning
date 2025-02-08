@@ -12,12 +12,12 @@ from ladning.types import VehicleChargeState, HourlyPrice, ChargingRequest, Ener
 
 @pytest.fixture()
 def vehicle_50_percent() -> VehicleChargeState:
-    return VehicleChargeState(battery_level=50, range_km=200, minutes_to_full_charge=0)
+    return VehicleChargeState(battery_level=50)
 
 
 @pytest.fixture()
 def vehicle_90_percent() -> VehicleChargeState:
-    return VehicleChargeState(battery_level=90, range_km=350, minutes_to_full_charge=0)
+    return VehicleChargeState(battery_level=90)
 
 
 def vehicle_charge_state_required_for_charging_duration_to_full(hours_of_charging: float) \
@@ -36,7 +36,7 @@ def vehicle_charge_state_required_for_charging_duration_to_full(hours_of_chargin
         battery_state = 95
         additional_hours = hours_of_charging - hours_required_from_95_percent
         battery_state -= int(additional_hours * CHARGING_KW_MAX / BATTERY_CAPACITY_KWH * 100.0)
-    return VehicleChargeState(battery_state, 350, 0)
+    return VehicleChargeState(battery_state)
 
 
 def test_argmin() -> None:
@@ -200,8 +200,10 @@ def test_create_charging_plan_ready_by(vehicle_50_percent: VehicleChargeState) -
 def test_create_charging_plan_immediate_start(vehicle_90_percent: VehicleChargeState) -> None:
     """
     Test that the charging plan will ignore hours in the past, but allow starting in the currently ongoing hour
+    if doing so is optimal from a cost perspective
     """
-    five_minutes_ago = dt.datetime.now().astimezone() - dt.timedelta(minutes=5)
+    now = dt.datetime.now().astimezone()
+    five_minutes_ago = now - dt.timedelta(minutes=5)
     hourly_prices: List[HourlyPrice] = [
         # Make some hours in the past the cheapest
         HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=5), price_kwh_dkk=0.1),
@@ -217,10 +219,11 @@ def test_create_charging_plan_immediate_start(vehicle_90_percent: VehicleChargeS
     ]
 
     result = create_charging_plan(vehicle_90_percent, hourly_prices,
-                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=2.0))
+                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=2.0),
+                                  current_time=now)
     assert result.success
     assert result.plan is not None
-    assert result.plan.start_time == five_minutes_ago
+    assert result.plan.start_time == now
 
 
 def test_create_charging_plan_early_partial_start() -> None:
@@ -293,3 +296,29 @@ def test_create_charging_plan_less_than_one_hour() -> None:
     assert result.success
     assert result.plan is not None
     assert result.plan.start_time == hourly_prices[1].start
+
+
+def test_create_charging_plan_immediate() -> None:
+    """
+    Test that charging plan creation can create a plan that begins immediately, regardless of price
+    """
+    vehicle_state = vehicle_charge_state_required_for_charging_duration_to_full(hours_of_charging=2.8)
+    now = dt.datetime.now().astimezone()
+    hourly_prices: List[HourlyPrice] = [
+        HourlyPrice(start=now + dt.timedelta(hours=0), price_kwh_dkk=3),
+        HourlyPrice(start=now + dt.timedelta(hours=1), price_kwh_dkk=2),
+        HourlyPrice(start=now + dt.timedelta(hours=2), price_kwh_dkk=1),
+        HourlyPrice(start=now + dt.timedelta(hours=3), price_kwh_dkk=1),
+        HourlyPrice(start=now + dt.timedelta(hours=4), price_kwh_dkk=1),
+    ]
+    result = create_charging_plan(vehicle_state, hourly_prices,
+                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=None,
+                                                  charge_immediately=True), current_time=now)
+
+    # Plan should start exactly when the cheapest hour begins
+    assert result.success
+    assert result.plan is not None
+    assert result.plan.start_time == hourly_prices[0].start
+    assert result.plan.battery_end == 100
+    assert result.plan.end_time > hourly_prices[2].start
+    assert result.plan.end_time < hourly_prices[3].start
