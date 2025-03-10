@@ -277,8 +277,14 @@ async def main():
         while not success:
             try:
                 prices = get_energy_prices()
-                await state.on_new_hourly_prices(prices)
-                success = True
+
+                # Check if hourly prices are actually new (last new item should be dated later than last current item)
+                if prices[-1].start > state.get_hourly_prices()[-1].start:
+                    await state.on_new_hourly_prices(prices)
+                    success = True
+                else:
+                    log.error(f"Energy prices weren't new - retrying in {retry_minutes} minutes")
+                    await asyncio.sleep(retry_minutes * 60)
             except Exception as e:
                 log.error(f"Error while loading new energy prices: '{e}' - retrying in {retry_minutes} minutes")
                 await asyncio.sleep(retry_minutes * 60)
