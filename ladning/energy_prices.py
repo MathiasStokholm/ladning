@@ -5,13 +5,6 @@ import datetime as dt
 import requests
 
 
-def next_datetime_at_hour(current: dt.datetime, hour: int, minutes: int = 0) -> dt.datetime:
-    repl = current.replace(hour=hour, minute=minutes, second=0, microsecond=0)
-    while repl <= current:
-        repl = repl + dt.timedelta(days=1)
-    return repl
-
-
 def get_energy_prices() -> List[HourlyPrice]:
     """
     Get the energy prices including tariffs and taxes from https://elprisen.somjson.dk.
