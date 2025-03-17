@@ -118,7 +118,8 @@ class ApplicationState:
         log.info(f"Planning charging from {self._vehicle_charge_state.battery_level}% with "
                  f"request: {self._charging_request}")
 
-        result = create_charging_plan(self._vehicle_charge_state, self._hourly_prices, self._charging_request)
+        result = create_charging_plan(self._vehicle_charge_state, self._hourly_prices, self._charging_request,
+                                      current_time=dt.datetime.now().astimezone())
         if not result.success:
             log.info(f"Charging plan unsuccessful: {result.reason}")
             return result

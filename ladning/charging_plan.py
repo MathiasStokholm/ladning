@@ -139,8 +139,7 @@ def calculate_energy_need(battery_state: int, target_state: int) -> Optional[Ene
 
 
 def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices: List[HourlyPrice],
-                         charging_request: ChargingRequest,
-                         current_time: dt.datetime = dt.datetime.now().astimezone()) -> ChargingRequestResponse:
+                         charging_request: ChargingRequest, current_time: dt.datetime) -> ChargingRequestResponse:
     # Check if charging is needed at all
     if not vehicle_charge_state.battery_level < charging_request.battery_target:
         return ChargingRequestResponse(False, reason="Vehicle battery level already at or above target", plan=None)
