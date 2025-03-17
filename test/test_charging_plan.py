@@ -113,6 +113,7 @@ def test_shift_fractional_forward() -> None:
     assert shifted_need.energy_signal[2] == pytest.approx(10.6)
     assert sum(shifted_need.energy_signal) == pytest.approx(sum(energy_need.energy_signal))
 
+
 def test_shift_fractional_forward_single_hour() -> None:
     """
     When shifting an EnergyNeed of less than one hour, simple return as is
@@ -175,7 +176,8 @@ def test_create_charging_plan_no_hours(vehicle_50_percent: VehicleChargeState) -
     with pytest.raises(RuntimeError):
         create_charging_plan(vehicle_charge_state=vehicle_50_percent, hourly_prices=[],
                              charging_request=ChargingRequest(battery_target=100, ready_by=None,
-                                                              max_average_price_dkk_kwh=2.0))
+                                                              max_average_price_dkk_kwh=2.0),
+                             current_time=dt.datetime.now().astimezone())
 
 
 def test_create_charging_plan_ready_by(vehicle_50_percent: VehicleChargeState) -> None:
@@ -191,7 +193,8 @@ def test_create_charging_plan_ready_by(vehicle_50_percent: VehicleChargeState) -
     hourly_prices[15].price_kwh_dkk = 1.1
     result = create_charging_plan(vehicle_50_percent, hourly_prices,
                                   ChargingRequest(battery_target=100, ready_by=hourly_prices[14].start,
-                                                  max_average_price_dkk_kwh=2.0))
+                                                  max_average_price_dkk_kwh=2.0),
+                                  current_time=start_time)
     assert result.success
     assert result.plan is not None
     assert result.plan.end_time <= hourly_prices[14].start
@@ -245,7 +248,8 @@ def test_create_charging_plan_early_partial_start() -> None:
         HourlyPrice(start=now + dt.timedelta(hours=6), price_kwh_dkk=2),
     ]
     result = create_charging_plan(vehicle_state, hourly_prices,
-                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=2.0))
+                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=2.0),
+                                  current_time=now)
     assert result.success
     assert result.plan is not None
     assert hourly_prices[1].start < result.plan.start_time < hourly_prices[2].start
@@ -266,16 +270,20 @@ def test_create_charging_plan_max_price() -> None:
 
     # Plan should succeed if maximum average price is higher than actual average price or if argument is left out
     result = create_charging_plan(vehicle_state, hourly_prices,
-                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=1.51))
+                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=1.51),
+                                  current_time=now)
     assert result.success
     result = create_charging_plan(vehicle_state, hourly_prices,
-                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=None))
+                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=None),
+                                  current_time=now)
     assert result.success
 
     # Plan should fail if maximum average price is lower than actual average price
     result = create_charging_plan(vehicle_state, hourly_prices,
-                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=1.45))
+                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=1.45),
+                                  current_time=now)
     assert not result.success
+
 
 def test_create_charging_plan_less_than_one_hour() -> None:
     """
@@ -290,7 +298,8 @@ def test_create_charging_plan_less_than_one_hour() -> None:
         HourlyPrice(start=now + dt.timedelta(hours=4), price_kwh_dkk=2),
     ]
     result = create_charging_plan(vehicle_state, hourly_prices,
-                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=1.8))
+                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=1.8),
+                                  current_time=now)
 
     # Plan should start exactly when the cheapest hour begins
     assert result.success
