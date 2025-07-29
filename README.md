@@ -40,3 +40,6 @@ To run tests, call:
 ```shell
 python -m pytest .
 ```
+
+## Energy Price Provider
+Energy prices are queried via Strømligning. https://stromligning.dk
