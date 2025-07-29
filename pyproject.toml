@@ -20,6 +20,7 @@ dev = [
     "flask-cors==4.0.1",
     "pyeasee",
     "pytest==8.3.2",
+    "ruff>=0.12.5",
     "teslapy==2.9.0",
     "waitress==3.0.0",
 ]

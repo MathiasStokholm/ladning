@@ -112,7 +112,7 @@ class ApplicationState:
         # Check if charging request is old and needs to be reset
         if self._charging_request.ready_by is not None:
             if self._charging_request.ready_by < dt.datetime.now().astimezone():
-                log.info(f"Resetting old charging request")
+                log.info("Resetting old charging request")
                 self._charging_request = self._default_charging_request
 
         log.info(f"Planning charging from {self._vehicle_charge_state.battery_level}% with "
@@ -149,7 +149,7 @@ class ApplicationState:
         self._charging_plan = None
 
         # Reset charging request
-        log.info(f"Resetting charging request due to cancelled charging")
+        log.info("Resetting charging request due to cancelled charging")
         self._charging_request = self._default_charging_request
 
     def complete_charging(self) -> None:
@@ -158,7 +158,7 @@ class ApplicationState:
         Note: This will not cancel the plan
         """
         self._charging_plan = None
-        log.info(f"Resetting charging request due to completed charging")
+        log.info("Resetting charging request due to completed charging")
         self._charging_request = self._default_charging_request
 
     async def on_new_hourly_prices(self, hourly_prices: List[HourlyPrice]) -> None:
@@ -299,7 +299,7 @@ async def main():
     try:
         await state.smart_charge()
     except:
-        log.warning(f"Quitting due to keyboard interrupt or error")
+        log.warning("Quitting due to keyboard interrupt or error")
         raise
     finally:
         # Clean up
