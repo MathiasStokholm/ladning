@@ -2,18 +2,12 @@
 
 ## Repo set up
 
-1. Create and activate venv:
-
-    ```bash
-    python -m venv .venv
-    source .venv/bin/activate
-    ```
-
+1. Ensure that you have `uv` installed (see https://docs.astral.sh/uv/getting-started/installation/):
 2. Install requirements:
 
-    ```bash
-    pip install -r requirements-dev.txt
-    ```
+ ```bash
+ uv sync
+ ```
 
 ## Authenticating with Tesla API (generating OAuth token)
 
@@ -30,7 +24,7 @@ machine.
 To run, call `main.py` with the required arguments:
 
 ```shell
-python main.py --easee_username [EASEE_USERNAME] --easee_password [EASEE_PASSWORD] --tesla_username [TESLA_USERNAME]
+uv run main.py --easee_username [EASEE_USERNAME] --easee_password [EASEE_PASSWORD] --tesla_username [TESLA_USERNAME]
 ```
 
 ## Running the tests
@@ -38,8 +32,9 @@ python main.py --easee_username [EASEE_USERNAME] --easee_password [EASEE_PASSWOR
 To run tests, call:
 
 ```shell
-python -m pytest .
+uv run pytest
 ```
 
 ## Energy Price Provider
+
 Energy prices are queried via Strømligning. https://stromligning.dk
