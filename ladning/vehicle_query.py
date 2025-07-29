@@ -11,7 +11,7 @@ def get_vehicle_charge_state(tesla: teslapy.Tesla, allow_wakeup: bool = False) -
     vehicle = vehicles[0]
     if vehicle["state"] == "asleep" or vehicle["state"] == "offline":
         if allow_wakeup:
-            log.warning(f"Waking up car to get battery level")
+            log.warning("Waking up car to get battery level")
             vehicle.sync_wake_up()
         else:
             raise RuntimeError("Car is asleep and wakeup wasn't allowed")

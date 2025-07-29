@@ -62,7 +62,7 @@ def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Hour
     """
 
     def success(req: ChargingRequest) -> ChargingRequestResponse:
-        assert req.charge_immediately == True
+        assert req.charge_immediately
         return ChargingRequestResponse(success=True, reason="",
                                        plan=ChargingPlan(dt.datetime.now().astimezone(),
                                                          dt.datetime.now().astimezone() + dt.timedelta(hours=5),
@@ -109,7 +109,7 @@ def test_webservice_charge_now(hourly_price_getter: Callable[[], List[HourlyPric
     """
 
     def success(req: ChargingRequest) -> ChargingRequestResponse:
-        assert req.charge_immediately == True
+        assert req.charge_immediately
         return ChargingRequestResponse(success=True, reason="",
                                        plan=ChargingPlan(dt.datetime.now().astimezone(),
                                                          dt.datetime.now().astimezone() + dt.timedelta(hours=5),
