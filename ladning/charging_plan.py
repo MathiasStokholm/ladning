@@ -95,6 +95,10 @@ def calculate_energy_need(battery_state: int, target_state: int) -> Optional[Ene
     if battery_state >= target_state:
         return None
 
+    # Charging rates per quarter hour
+    CHARGING_KW_MAX_QH = CHARGING_KW_MAX / 4
+    CHARGING_KW_END_QH = CHARGING_KW_END / 4
+
     if target_state < 95:
         # If target is below 95%, only consider the full charging speed
         hours_required = ((target_state - battery_state) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW_MAX
@@ -106,36 +110,36 @@ def calculate_energy_need(battery_state: int, target_state: int) -> Optional[Ene
         return EnergyNeed(energy_signal=energy_signal, hours_required=hours_required)
 
     # If charging above 95%, first charge at full rate to 95% ...
-    hours_required_to_95_percent = ((95 - battery_state) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW_MAX
+    quarter_hours_required_to_95_percent = ((95 - battery_state) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW_MAX_QH
 
     # ... then charge the remaining 5% at a lower rate
-    hours_required_from_95_percent = ((target_state - 95) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW_END
+    quarter_hours_required_from_95_percent = ((target_state - 95) / 100.0) * BATTERY_CAPACITY_KWH / CHARGING_KW_END_QH
 
     energy_signal: List[float] = []
-    hours_required = 0
-    if hours_required_to_95_percent > 0:
-        hours_required += hours_required_to_95_percent
-        fractional_hour_to_95, full_hours_to_95 = math.modf(hours_required_to_95_percent)
-        energy_signal.extend([CHARGING_KW_MAX] * int(full_hours_to_95))
-        if fractional_hour_to_95 > 0:
-            energy_signal.append(CHARGING_KW_MAX * fractional_hour_to_95)
-    if hours_required_from_95_percent > 0:
-        hours_required += hours_required_from_95_percent
+    quarter_hours_required = 0
+    if quarter_hours_required_to_95_percent > 0:
+        quarter_hours_required += quarter_hours_required_to_95_percent
+        fractional_quarter_hour_to_95, full_quarter_hours_to_95 = math.modf(quarter_hours_required_to_95_percent)
+        energy_signal.extend([CHARGING_KW_MAX_QH] * int(full_quarter_hours_to_95))
+        if fractional_quarter_hour_to_95 > 0:
+            energy_signal.append(CHARGING_KW_MAX_QH * fractional_quarter_hour_to_95)
+    if quarter_hours_required_from_95_percent > 0:
+        quarter_hours_required += quarter_hours_required_from_95_percent
 
         # Modify existing fractional energy signal entry according to lower charge rate (for the remaining time)
         if len(energy_signal) > 0:
-            available_time = 1.0 - math.modf(hours_required_to_95_percent)[0]
-            used_time = min(available_time, hours_required_from_95_percent)
-            energy_signal[-1] += used_time * CHARGING_KW_END
-            hours_required_from_95_percent -= used_time
+            available_time = 1.0 - math.modf(quarter_hours_required_from_95_percent)[0]
+            used_time = min(available_time, quarter_hours_required_from_95_percent)
+            energy_signal[-1] += used_time * CHARGING_KW_END_QH
+            quarter_hours_required_from_95_percent -= used_time
 
         # Add remaining reduced energy signal entries
-        fractional_hour_from_95, full_hours_from_95 = math.modf(hours_required_from_95_percent)
-        energy_signal.extend([CHARGING_KW_END] * int(full_hours_from_95))
-        if fractional_hour_from_95 > 0.0:
-            energy_signal.append(CHARGING_KW_END * fractional_hour_from_95)
+        fractional_quarter_hour_from_95, full_hours_from_95 = math.modf(quarter_hours_required_from_95_percent)
+        energy_signal.extend([CHARGING_KW_END_QH] * int(full_hours_from_95))
+        if fractional_quarter_hour_from_95 > 0.0:
+            energy_signal.append(CHARGING_KW_END_QH * fractional_quarter_hour_from_95)
 
-    return EnergyNeed(energy_signal=energy_signal, hours_required=hours_required)
+    return EnergyNeed(energy_signal=energy_signal, hours_required=quarter_hours_required * 4.0)
 
 
 def create_charging_plan(vehicle_charge_state: VehicleChargeState, hourly_prices: List[HourlyPrice],
