@@ -237,7 +237,7 @@ async def schedule_charge(charger: Charger, charging_plan: ChargingPlan) -> None
     response = await charger.set_basic_charge_plan(id=42,  # Unsure what ID to use here
                                                    chargeStartTime=_format(charging_plan.start_time),
                                                    chargeStopTime=charge_stop_time,
-                                                   repeat=False,
+                                                   repeat=True,
                                                    isEnabled=True)
     if not response.ok:
         raise RuntimeError(f"Scheduling charge failed: '{response.reason}' (code {response.status})")
