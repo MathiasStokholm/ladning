@@ -5,6 +5,7 @@ import datetime as dt
 import pytest
 import requests
 
+from ladning.constants import PRICE_FRACTION_OF_HOUR
 from ladning.types import Price, ChargingPlan, ChargingRequest, ChargingRequestResponse
 from ladning.webservice import LadningService
 
@@ -14,11 +15,11 @@ HOST_ADDRESS = "127.0.0.1"  # This has to be an IPv4 address for webservice to n
 
 
 @pytest.fixture
-def hourly_price_getter() -> Callable[[], List[Price]]:
+def price_getter() -> Callable[[], List[Price]]:
     def _func():
         return [
             Price(dt.datetime.now().astimezone(), 1.32),
-            Price(dt.datetime.now().astimezone() + dt.timedelta(hours=1), 2.5),
+            Price(dt.datetime.now().astimezone() + dt.timedelta(hours=PRICE_FRACTION_OF_HOUR), 2.5),
         ]
 
     return _func
@@ -26,7 +27,8 @@ def hourly_price_getter() -> Callable[[], List[Price]]:
 
 @pytest.fixture
 def charging_plan_getter() -> Callable[[], Optional[ChargingPlan]]:
-    return lambda: ChargingPlan(dt.datetime.now().astimezone(), dt.datetime.now().astimezone() + dt.timedelta(hours=1),
+    return lambda: ChargingPlan(dt.datetime.now().astimezone(),
+                                dt.datetime.now().astimezone() + dt.timedelta(hours=PRICE_FRACTION_OF_HOUR),
                                 90, 100, 10.0, 120.0)
 
 
@@ -35,14 +37,14 @@ def charging_request_setter() -> Callable[[ChargingRequest], ChargingRequestResp
     return lambda _: ChargingRequestResponse(success=True, reason="", plan=None)
 
 
-def test_webservice_query(hourly_price_getter: Callable[[], List[Price]],
+def test_webservice_query(price_getter: Callable[[], List[Price]],
                           charging_plan_getter: Callable[[], Optional[ChargingPlan]],
                           charging_request_setter: Callable[[ChargingRequest], ChargingRequestResponse]) -> None:
     """
     Test that the "/electricity" API endpoint can be queried with HTTP GET and that it returns a charging plan and
     hourly pries
     """
-    with LadningService(host=HOST_ADDRESS, port=FREE_PORT, electricity_price_getter=hourly_price_getter,
+    with LadningService(host=HOST_ADDRESS, port=FREE_PORT, electricity_price_getter=price_getter,
                         charging_plan_getter=charging_plan_getter,
                         charging_request_setter=charging_request_setter) as service:
         url = f"{service.endpoint}/electricity"
@@ -50,11 +52,11 @@ def test_webservice_query(hourly_price_getter: Callable[[], List[Price]],
         resp.raise_for_status()
         results = resp.json()
         assert results["charging_plan"] is not None
-        assert results["hourly_prices"] is not None
-        assert len(results["hourly_prices"]) == 2
+        assert results["prices"] is not None
+        assert len(results["prices"]) == 2
 
 
-def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Price]],
+def test_webservice_charging_request(price_getter: Callable[[], List[Price]],
                                      charging_plan_getter: Callable[[], Optional[ChargingPlan]]) -> None:
     """
     Test that the "/charging_request" API endpoint can be called with HTTP POST and that it returns the result of the
@@ -79,7 +81,7 @@ def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Pric
     headers = {'Content-type': 'application/json'}
 
     # Test success
-    with LadningService(host=HOST_ADDRESS, port=FREE_PORT, electricity_price_getter=hourly_price_getter,
+    with LadningService(host=HOST_ADDRESS, port=FREE_PORT, electricity_price_getter=price_getter,
                         charging_plan_getter=charging_plan_getter, charging_request_setter=success) as service:
         url = f"{service.endpoint}/charging_request"
         resp = requests.post(url, json=request_data, headers=headers)
@@ -90,7 +92,7 @@ def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Pric
         assert results["plan"] is not None
 
     # Test failure
-    with LadningService(host=HOST_ADDRESS, port=FREE_PORT, electricity_price_getter=hourly_price_getter,
+    with LadningService(host=HOST_ADDRESS, port=FREE_PORT, electricity_price_getter=price_getter,
                         charging_plan_getter=charging_plan_getter, charging_request_setter=failure) as service:
         url = f"{service.endpoint}/charging_request"
         resp = requests.post(url, json=request_data, headers=headers)
@@ -101,7 +103,7 @@ def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Pric
         assert results["plan"] is None
 
 
-def test_webservice_charge_now(hourly_price_getter: Callable[[], List[Price]],
+def test_webservice_charge_now(price_getter: Callable[[], List[Price]],
                                charging_plan_getter: Callable[[], Optional[ChargingPlan]]) -> None:
     """
     Test that the "/charging_request" API endpoint can be called with HTTP POST and that it can handle
@@ -121,7 +123,7 @@ def test_webservice_charge_now(hourly_price_getter: Callable[[], List[Price]],
     headers = {'Content-type': 'application/json'}
 
     # Test success
-    with LadningService(host=HOST_ADDRESS, port=FREE_PORT, electricity_price_getter=hourly_price_getter,
+    with LadningService(host=HOST_ADDRESS, port=FREE_PORT, electricity_price_getter=price_getter,
                         charging_plan_getter=charging_plan_getter, charging_request_setter=success) as service:
         url = f"{service.endpoint}/charging_request"
         resp = requests.post(url, json=request_data, headers=headers)

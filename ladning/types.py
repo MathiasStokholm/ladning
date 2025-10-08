@@ -26,7 +26,7 @@ class ChargingPlan:
 
 @dataclasses.dataclass
 class EnergyNeed:
-    energy_signal: List[float]
+    energy_signal: List[float]  # Energy needed per quarter-hour in kwh
     hours_required: float
 
 
