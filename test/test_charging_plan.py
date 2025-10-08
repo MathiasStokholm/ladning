@@ -7,7 +7,7 @@ import datetime as dt
 from ladning.charging_plan import create_charging_plan, argmin, convolve_valid, calculate_energy_need, \
     shift_fractional_forward
 from ladning.constants import BATTERY_CAPACITY_KWH, CHARGING_KW_MAX, CHARGING_KW_END
-from ladning.types import VehicleChargeState, HourlyPrice, ChargingRequest, EnergyNeed
+from ladning.types import VehicleChargeState, Price, ChargingRequest, EnergyNeed
 
 
 @pytest.fixture()
@@ -182,8 +182,8 @@ def test_create_charging_plan_no_hours(vehicle_50_percent: VehicleChargeState) -
 
 def test_create_charging_plan_ready_by(vehicle_50_percent: VehicleChargeState) -> None:
     start_time = dt.datetime.now().astimezone()
-    hourly_prices: List[HourlyPrice] = [
-        HourlyPrice(start=start_time + dt.timedelta(hours=i), price_kwh_dkk=2.0)
+    hourly_prices: List[Price] = [
+        Price(start=start_time + dt.timedelta(hours=i), price_kwh_dkk=2.0)
         for i in range(24)
     ]
 
@@ -207,18 +207,18 @@ def test_create_charging_plan_immediate_start(vehicle_90_percent: VehicleChargeS
     """
     now = dt.datetime.now().astimezone()
     five_minutes_ago = now - dt.timedelta(minutes=5)
-    hourly_prices: List[HourlyPrice] = [
+    hourly_prices: List[Price] = [
         # Make some hours in the past the cheapest
-        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=5), price_kwh_dkk=0.1),
-        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=4), price_kwh_dkk=0.1),
-        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=3), price_kwh_dkk=0.1),
-        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=2), price_kwh_dkk=1.0),
-        HourlyPrice(start=five_minutes_ago - dt.timedelta(hours=1), price_kwh_dkk=1.0),
+        Price(start=five_minutes_ago - dt.timedelta(hours=5), price_kwh_dkk=0.1),
+        Price(start=five_minutes_ago - dt.timedelta(hours=4), price_kwh_dkk=0.1),
+        Price(start=five_minutes_ago - dt.timedelta(hours=3), price_kwh_dkk=0.1),
+        Price(start=five_minutes_ago - dt.timedelta(hours=2), price_kwh_dkk=1.0),
+        Price(start=five_minutes_ago - dt.timedelta(hours=1), price_kwh_dkk=1.0),
         # Make the hour that started 5 minutes ago the next best selection
-        HourlyPrice(start=five_minutes_ago, price_kwh_dkk=0.5),
-        HourlyPrice(start=five_minutes_ago + dt.timedelta(hours=1), price_kwh_dkk=1.0),
-        HourlyPrice(start=five_minutes_ago + dt.timedelta(hours=2), price_kwh_dkk=1.0),
-        HourlyPrice(start=five_minutes_ago + dt.timedelta(hours=3), price_kwh_dkk=1.0),
+        Price(start=five_minutes_ago, price_kwh_dkk=0.5),
+        Price(start=five_minutes_ago + dt.timedelta(hours=1), price_kwh_dkk=1.0),
+        Price(start=five_minutes_ago + dt.timedelta(hours=2), price_kwh_dkk=1.0),
+        Price(start=five_minutes_ago + dt.timedelta(hours=3), price_kwh_dkk=1.0),
     ]
 
     result = create_charging_plan(vehicle_90_percent, hourly_prices,
@@ -238,14 +238,14 @@ def test_create_charging_plan_early_partial_start() -> None:
     # half of the second hour
     vehicle_state = vehicle_charge_state_required_for_charging_duration_to_full(1.5)
     now = dt.datetime.now().astimezone()
-    hourly_prices: List[HourlyPrice] = [
+    hourly_prices: List[Price] = [
         # Make some hours in the past the cheapest
-        HourlyPrice(start=now + dt.timedelta(hours=1), price_kwh_dkk=2),
-        HourlyPrice(start=now + dt.timedelta(hours=2), price_kwh_dkk=1.4),
-        HourlyPrice(start=now + dt.timedelta(hours=3), price_kwh_dkk=1.1),
-        HourlyPrice(start=now + dt.timedelta(hours=4), price_kwh_dkk=1.91),
-        HourlyPrice(start=now + dt.timedelta(hours=5), price_kwh_dkk=2),
-        HourlyPrice(start=now + dt.timedelta(hours=6), price_kwh_dkk=2),
+        Price(start=now + dt.timedelta(hours=1), price_kwh_dkk=2),
+        Price(start=now + dt.timedelta(hours=2), price_kwh_dkk=1.4),
+        Price(start=now + dt.timedelta(hours=3), price_kwh_dkk=1.1),
+        Price(start=now + dt.timedelta(hours=4), price_kwh_dkk=1.91),
+        Price(start=now + dt.timedelta(hours=5), price_kwh_dkk=2),
+        Price(start=now + dt.timedelta(hours=6), price_kwh_dkk=2),
     ]
     result = create_charging_plan(vehicle_state, hourly_prices,
                                   ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=2.0),
@@ -263,9 +263,9 @@ def test_create_charging_plan_max_price() -> None:
     # Assume that charging will take almost two hours
     vehicle_state = vehicle_charge_state_required_for_charging_duration_to_full(2.0)
     now = dt.datetime.now().astimezone()
-    hourly_prices: List[HourlyPrice] = [
-        HourlyPrice(start=now + dt.timedelta(hours=1), price_kwh_dkk=1.0),
-        HourlyPrice(start=now + dt.timedelta(hours=2), price_kwh_dkk=2.0),
+    hourly_prices: List[Price] = [
+        Price(start=now + dt.timedelta(hours=1), price_kwh_dkk=1.0),
+        Price(start=now + dt.timedelta(hours=2), price_kwh_dkk=2.0),
     ]
 
     # Plan should succeed if maximum average price is higher than actual average price or if argument is left out
@@ -292,10 +292,10 @@ def test_create_charging_plan_less_than_one_hour() -> None:
     """
     vehicle_state = vehicle_charge_state_required_for_charging_duration_to_full(0.5)
     now = dt.datetime.now().astimezone()
-    hourly_prices: List[HourlyPrice] = [
-        HourlyPrice(start=now + dt.timedelta(hours=1), price_kwh_dkk=2),
-        HourlyPrice(start=now + dt.timedelta(hours=2), price_kwh_dkk=1.4),
-        HourlyPrice(start=now + dt.timedelta(hours=4), price_kwh_dkk=2),
+    hourly_prices: List[Price] = [
+        Price(start=now + dt.timedelta(hours=1), price_kwh_dkk=2),
+        Price(start=now + dt.timedelta(hours=2), price_kwh_dkk=1.4),
+        Price(start=now + dt.timedelta(hours=4), price_kwh_dkk=2),
     ]
     result = create_charging_plan(vehicle_state, hourly_prices,
                                   ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=1.8),
@@ -313,12 +313,12 @@ def test_create_charging_plan_immediate() -> None:
     """
     vehicle_state = vehicle_charge_state_required_for_charging_duration_to_full(hours_of_charging=2.8)
     now = dt.datetime.now().astimezone()
-    hourly_prices: List[HourlyPrice] = [
-        HourlyPrice(start=now + dt.timedelta(hours=0), price_kwh_dkk=3),
-        HourlyPrice(start=now + dt.timedelta(hours=1), price_kwh_dkk=2),
-        HourlyPrice(start=now + dt.timedelta(hours=2), price_kwh_dkk=1),
-        HourlyPrice(start=now + dt.timedelta(hours=3), price_kwh_dkk=1),
-        HourlyPrice(start=now + dt.timedelta(hours=4), price_kwh_dkk=1),
+    hourly_prices: List[Price] = [
+        Price(start=now + dt.timedelta(hours=0), price_kwh_dkk=3),
+        Price(start=now + dt.timedelta(hours=1), price_kwh_dkk=2),
+        Price(start=now + dt.timedelta(hours=2), price_kwh_dkk=1),
+        Price(start=now + dt.timedelta(hours=3), price_kwh_dkk=1),
+        Price(start=now + dt.timedelta(hours=4), price_kwh_dkk=1),
     ]
     result = create_charging_plan(vehicle_state, hourly_prices,
                                   ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=None,

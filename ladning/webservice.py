@@ -7,12 +7,12 @@ import waitress
 from flask_cors import CORS
 
 from ladning.logging import log
-from ladning.types import HourlyPrice, ChargingPlan, ChargingRequest, ChargingRequestResponse
+from ladning.types import Price, ChargingPlan, ChargingRequest, ChargingRequestResponse
 from dataclasses import asdict
 
 
 class LadningService:
-    def __init__(self, host: str, port: int, electricity_price_getter: Callable[[], List[HourlyPrice]],
+    def __init__(self, host: str, port: int, electricity_price_getter: Callable[[], List[Price]],
                  charging_plan_getter: Callable[[], Optional[ChargingPlan]],
                  charging_request_setter: Callable[[ChargingRequest], ChargingRequestResponse]) -> None:
         self._electricity_price_getter = electricity_price_getter

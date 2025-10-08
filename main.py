@@ -15,7 +15,7 @@ from pyeasee.charger import STATUS as CHARGER_STATUS, Charger
 from ladning.charging_plan import create_charging_plan
 from ladning.energy_prices import get_energy_prices
 from ladning.logging import log
-from ladning.types import ChargingPlan, HourlyPrice, VehicleChargeState, ChargingRequest, ChargingRequestResponse
+from ladning.types import ChargingPlan, Price, VehicleChargeState, ChargingRequest, ChargingRequestResponse
 from ladning.vehicle_query import get_vehicle_charge_state
 
 from ladning.webservice import LadningService
@@ -29,7 +29,7 @@ DISCONNECTED = "DISCONNECTED"
 
 
 class ApplicationState:
-    def __init__(self, easee: Easee, tesla: teslapy.Tesla, hourly_prices: List[HourlyPrice],
+    def __init__(self, easee: Easee, tesla: teslapy.Tesla, hourly_prices: List[Price],
                  max_average_price_default: Optional[float]) -> None:
         self._easee = easee
         self._tesla = tesla
@@ -52,7 +52,7 @@ class ApplicationState:
             self._charger = chargers[0]
         return self._charger
 
-    def get_hourly_prices(self) -> List[HourlyPrice]:
+    def get_hourly_prices(self) -> List[Price]:
         return self._hourly_prices
 
     def get_charging_plan(self) -> Optional[ChargingPlan]:
@@ -161,7 +161,7 @@ class ApplicationState:
         log.info("Resetting charging request due to completed charging")
         self._charging_request = self._default_charging_request
 
-    async def on_new_hourly_prices(self, hourly_prices: List[HourlyPrice]) -> None:
+    async def on_new_hourly_prices(self, hourly_prices: List[Price]) -> None:
         log.info("New hourly prices received")
         if hourly_prices == self._hourly_prices:
             log.info("New hourly prices were unchanged, skipping handling")

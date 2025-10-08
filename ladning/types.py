@@ -9,7 +9,7 @@ class VehicleChargeState:
 
 
 @dataclasses.dataclass
-class HourlyPrice:
+class Price:
     start: dt.datetime
     price_kwh_dkk: float
 

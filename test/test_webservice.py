@@ -5,7 +5,7 @@ import datetime as dt
 import pytest
 import requests
 
-from ladning.types import HourlyPrice, ChargingPlan, ChargingRequest, ChargingRequestResponse
+from ladning.types import Price, ChargingPlan, ChargingRequest, ChargingRequestResponse
 from ladning.webservice import LadningService
 
 # Use any free port for web services
@@ -14,11 +14,11 @@ HOST_ADDRESS = "127.0.0.1"  # This has to be an IPv4 address for webservice to n
 
 
 @pytest.fixture
-def hourly_price_getter() -> Callable[[], List[HourlyPrice]]:
+def hourly_price_getter() -> Callable[[], List[Price]]:
     def _func():
         return [
-            HourlyPrice(dt.datetime.now().astimezone(), 1.32),
-            HourlyPrice(dt.datetime.now().astimezone() + dt.timedelta(hours=1), 2.5),
+            Price(dt.datetime.now().astimezone(), 1.32),
+            Price(dt.datetime.now().astimezone() + dt.timedelta(hours=1), 2.5),
         ]
 
     return _func
@@ -35,7 +35,7 @@ def charging_request_setter() -> Callable[[ChargingRequest], ChargingRequestResp
     return lambda _: ChargingRequestResponse(success=True, reason="", plan=None)
 
 
-def test_webservice_query(hourly_price_getter: Callable[[], List[HourlyPrice]],
+def test_webservice_query(hourly_price_getter: Callable[[], List[Price]],
                           charging_plan_getter: Callable[[], Optional[ChargingPlan]],
                           charging_request_setter: Callable[[ChargingRequest], ChargingRequestResponse]) -> None:
     """
@@ -54,7 +54,7 @@ def test_webservice_query(hourly_price_getter: Callable[[], List[HourlyPrice]],
         assert len(results["hourly_prices"]) == 2
 
 
-def test_webservice_charging_request(hourly_price_getter: Callable[[], List[HourlyPrice]],
+def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Price]],
                                      charging_plan_getter: Callable[[], Optional[ChargingPlan]]) -> None:
     """
     Test that the "/charging_request" API endpoint can be called with HTTP POST and that it returns the result of the
@@ -101,8 +101,8 @@ def test_webservice_charging_request(hourly_price_getter: Callable[[], List[Hour
         assert results["plan"] is None
 
 
-def test_webservice_charge_now(hourly_price_getter: Callable[[], List[HourlyPrice]],
-                                     charging_plan_getter: Callable[[], Optional[ChargingPlan]]) -> None:
+def test_webservice_charge_now(hourly_price_getter: Callable[[], List[Price]],
+                               charging_plan_getter: Callable[[], Optional[ChargingPlan]]) -> None:
     """
     Test that the "/charging_request" API endpoint can be called with HTTP POST and that it can handle
     charge_immediately requests correctly (including the very sparse request)
