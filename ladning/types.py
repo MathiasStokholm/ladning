@@ -9,7 +9,7 @@ class VehicleChargeState:
 
 
 @dataclasses.dataclass
-class HourlyPrice:
+class Price:
     start: dt.datetime
     price_kwh_dkk: float
 
@@ -26,8 +26,8 @@ class ChargingPlan:
 
 @dataclasses.dataclass
 class EnergyNeed:
-    energy_signal: List[float]
-    hours_required: float
+    energy_signal: List[float]  # Energy needed per quarter-hour in kwh
+    quarter_hours_required: float
 
 
 @dataclasses.dataclass

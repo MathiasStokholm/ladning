@@ -7,12 +7,12 @@ import waitress
 from flask_cors import CORS
 
 from ladning.logging import log
-from ladning.types import HourlyPrice, ChargingPlan, ChargingRequest, ChargingRequestResponse
+from ladning.types import Price, ChargingPlan, ChargingRequest, ChargingRequestResponse
 from dataclasses import asdict
 
 
 class LadningService:
-    def __init__(self, host: str, port: int, electricity_price_getter: Callable[[], List[HourlyPrice]],
+    def __init__(self, host: str, port: int, electricity_price_getter: Callable[[], List[Price]],
                  charging_plan_getter: Callable[[], Optional[ChargingPlan]],
                  charging_request_setter: Callable[[ChargingRequest], ChargingRequestResponse]) -> None:
         self._electricity_price_getter = electricity_price_getter
@@ -53,11 +53,11 @@ class LadningService:
         """
         API endpoint to query electricity prices and current charging schedule
         """
-        hourly_prices = self._electricity_price_getter()
+        prices = self._electricity_price_getter()
         charging_plan = self._charging_plan_getter()
         combined = dict(
             charging_plan=None if charging_plan is None else asdict(charging_plan),
-            hourly_prices=[asdict(p) for p in hourly_prices]
+            prices=[asdict(p) for p in prices]
         )
         return jsonify(combined)
 
@@ -75,7 +75,7 @@ class LadningService:
 
             # Parse "max_average_price_dkk_kwh" field if applicable
             max_average_price_dkk_kwh = float(data["max_average_price_dkk_kwh"]) \
-                    if "max_average_price_dkk_kwh" in data else None
+                if "max_average_price_dkk_kwh" in data else None
 
             # Parse "charge_immediately" field, but default to False if not provided
             charge_immediately: bool = data.get("charge_immediately", False)
