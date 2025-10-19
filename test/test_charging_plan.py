@@ -106,7 +106,7 @@ def test_convolve_valid_both_empty() -> None:
 def test_shift_fractional_forward() -> None:
     energy_need = EnergyNeed([10.6, 10.6, 8.6, 2.8], 3.8)
     shifted_need = shift_fractional_forward(energy_need)
-    assert shifted_need.hours_required == energy_need.hours_required
+    assert shifted_need.quarter_hours_required == energy_need.quarter_hours_required
     assert len(shifted_need.energy_signal) == len(energy_need.energy_signal)
     assert shifted_need.energy_signal[0] == pytest.approx(10.6 * 0.8)
     assert shifted_need.energy_signal[1] == pytest.approx(10.6)
@@ -152,9 +152,9 @@ def test_calculate_energy_need_below_95() -> None:
 
     # All the full hours (except the last fractional hour) should charge at max rate
     # The last fractional hour should also charge at max rate, but for less than a full hour
-    fractional_hour, full_hours = math.modf(energy_need.hours_required)
-    assert energy_need.energy_signal[:-1] == [CHARGING_KW_MAX] * int(full_hours)
-    assert energy_need.energy_signal[-1] == pytest.approx(fractional_hour * CHARGING_KW_MAX)
+    fractional_quarter_hour, full_quarter_hours = math.modf(energy_need.quarter_hours_required)
+    assert energy_need.energy_signal[:-1] == [CHARGING_KW_MAX / 4] * int(full_quarter_hours)
+    assert energy_need.energy_signal[-1] == pytest.approx(fractional_quarter_hour * CHARGING_KW_MAX / 4)
 
 
 def test_calculate_energy_need_to_full() -> None:
@@ -168,13 +168,12 @@ def test_calculate_energy_need_to_full() -> None:
     assert sum(energy_need.energy_signal) == pytest.approx(diff * BATTERY_CAPACITY_KWH)
 
     # Charging should happen at max rate until 95%, and then drop to a lower rate
-    fractional_hour, full_hours = math.modf(energy_need.hours_required)
     # TODO: Find a way to check this
 
 
 def test_create_charging_plan_no_hours(vehicle_50_percent: VehicleChargeState) -> None:
     with pytest.raises(RuntimeError):
-        create_charging_plan(vehicle_charge_state=vehicle_50_percent, hourly_prices=[],
+        create_charging_plan(vehicle_charge_state=vehicle_50_percent, prices=[],
                              charging_request=ChargingRequest(battery_target=100, ready_by=None,
                                                               max_average_price_dkk_kwh=2.0),
                              current_time=dt.datetime.now().astimezone())
