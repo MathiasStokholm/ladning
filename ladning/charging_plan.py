@@ -128,7 +128,7 @@ def calculate_energy_need(battery_state: int, target_state: int) -> Optional[Ene
 
         # Modify existing fractional energy signal entry according to lower charge rate (for the remaining time)
         if len(energy_signal) > 0:
-            available_time = 1.0 - math.modf(quarter_hours_required_from_95_percent)[0]
+            available_time = 1.0 - (energy_signal[-1] / CHARGING_KW_MAX_QH)
             used_time = min(available_time, quarter_hours_required_from_95_percent)
             energy_signal[-1] += used_time * CHARGING_KW_END_QH
             quarter_hours_required_from_95_percent -= used_time
@@ -169,11 +169,10 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, prices: List[
             prices_valid.append(p)
 
     # Check if a sufficient amount of quarter-hours exists for the ready by time to be honored
-    num_hourly_prices_available = len(prices_valid) / 4
-    if num_hourly_prices_available < math.ceil(energy_need.quarter_hours_required):
+    if len(prices_valid) < math.ceil(energy_need.quarter_hours_required):
         return ChargingRequestResponse(False, reason="Not enough time to charge to the requested level", plan=None)
 
-    # If the first hour has already begun, clamp it to the current time to correctly estimate end of charging
+    # If the first quarter-hour has already begun, clamp it to the current time to correctly estimate end of charging
     if prices_valid[0].start < current_time:
         prices_valid[0].start = current_time
 
@@ -190,7 +189,7 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, prices: List[
     if charging_request.charge_immediately:
         immediate_price = full_hour_total_prices[0]
         start_time = prices_valid[0].start
-        end_time = start_time + dt.timedelta(hours=energy_need.quarter_hours_required)
+        end_time = start_time + SAMPLING_PERIOD * energy_need.quarter_hours_required
         return ChargingRequestResponse(success=True, reason="",
                                        plan=ChargingPlan(start_time=start_time, end_time=end_time,
                                                          battery_start=vehicle_charge_state.battery_level,
@@ -216,7 +215,7 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, prices: List[
         # Full hour strategy works best
         start_idx = argmin(full_hour_total_prices)
         start_time = prices_valid[start_idx].start
-        end_time = start_time + dt.timedelta(hours=energy_need.quarter_hours_required)
+        end_time = start_time + SAMPLING_PERIOD * energy_need.quarter_hours_required
         return ChargingRequestResponse(success=True, reason="",
                                        plan=ChargingPlan(start_time=start_time, end_time=end_time,
                                                          battery_start=vehicle_charge_state.battery_level,
@@ -229,11 +228,11 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, prices: List[
         start_idx = argmin(partial_hour_total_prices)
         starting_hour = prices_valid[start_idx].start
 
-        # Determine how many minutes into the hour to start
-        hourly_fraction = math.modf(energy_need.quarter_hours_required)[0]
-        minutes_into_hour = (1.0 - hourly_fraction) * 60.0
-        start_time = starting_hour + dt.timedelta(minutes=minutes_into_hour)
-        end_time = start_time + dt.timedelta(hours=energy_need.quarter_hours_required)
+        # Determine fraction into the current entry to start
+        fraction = math.modf(energy_need.quarter_hours_required)[0]
+        offset = (1.0 - fraction) * SAMPLING_PERIOD
+        start_time = starting_hour + offset
+        end_time = start_time + SAMPLING_PERIOD * energy_need.quarter_hours_required
         return ChargingRequestResponse(success=True, reason="",
                                        plan=ChargingPlan(start_time=start_time, end_time=end_time,
                                                          battery_start=vehicle_charge_state.battery_level,
