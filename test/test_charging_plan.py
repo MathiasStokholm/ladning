@@ -5,7 +5,7 @@ import pytest
 import datetime as dt
 
 from ladning.charging_plan import create_charging_plan, argmin, convolve_valid, calculate_energy_need, \
-    shift_fractional_forward
+    shift_fractional
 from ladning.constants import BATTERY_CAPACITY_KWH, CHARGING_KW_MAX, CHARGING_KW_END, SAMPLING_PERIOD
 from ladning.types import VehicleChargeState, Price, ChargingRequest, EnergyNeed
 
@@ -103,24 +103,30 @@ def test_convolve_valid_both_empty() -> None:
     assert convolve_valid(signal1, signal2) == expected
 
 
-def test_shift_fractional_forward() -> None:
-    energy_need = EnergyNeed([10.6, 10.6, 8.6, 2.8], 3.8)
-    shifted_need = shift_fractional_forward(energy_need)
-    assert shifted_need.quarter_hours_required == energy_need.quarter_hours_required
-    assert len(shifted_need.energy_signal) == len(energy_need.energy_signal)
-    assert shifted_need.energy_signal[0] == pytest.approx(10.6 * 0.8)
-    assert shifted_need.energy_signal[1] == pytest.approx(10.6)
-    assert shifted_need.energy_signal[2] == pytest.approx(10.6)
-    assert sum(shifted_need.energy_signal) == pytest.approx(sum(energy_need.energy_signal))
-
-
-def test_shift_fractional_forward_single_hour() -> None:
+def test_shift_fractional_single_hour() -> None:
     """
-    When shifting an EnergyNeed of less than one hour, simple return as is
+    When shifting an EnergyNeed of less than a quarter-hour, simple return as is
     """
-    energy_need = EnergyNeed([10.6 * 0.5], 0.5)
-    shifted_need = shift_fractional_forward(energy_need)
+    energy_need = EnergyNeed([2.65 * 0.5], 0.5)
+    shifted_need = shift_fractional(energy_need, fraction=0.5)
     assert shifted_need == energy_need
+
+
+def test_shift_fractional() -> None:
+    """
+    Test that shifting a "full" energy signal back by 50% changes the first entry appropriately and adds a new entry
+    at the end
+    """
+    energy_need = EnergyNeed([10, 10, 10], 3.0)
+    fraction = 0.5
+    shifted_need = shift_fractional(energy_need, fraction)
+    assert shifted_need.quarter_hours_required == energy_need.quarter_hours_required
+    assert len(shifted_need.energy_signal) == len(energy_need.energy_signal) + 1
+    assert shifted_need.energy_signal[0] == pytest.approx(10 * 0.5)
+    assert shifted_need.energy_signal[1] == pytest.approx(10)
+    assert shifted_need.energy_signal[2] == pytest.approx(10)
+    assert shifted_need.energy_signal[3] == pytest.approx(10 * 0.5)
+    assert sum(shifted_need.energy_signal) == pytest.approx(sum(energy_need.energy_signal))
 
 
 def test_calculate_energy_need_invalid_inputs() -> None:

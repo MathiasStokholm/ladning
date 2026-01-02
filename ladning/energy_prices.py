@@ -8,7 +8,7 @@ import requests
 
 def get_energy_prices(supplier_id: str = "radius_c", product_id: str = "vindstoed_danskvind") -> List[Price]:
     """
-    Get the energy prices including tariffs and taxes from stromligning.dk.
+    Get the energy prices including tariffs from stromligning.dk.
 
     See https://stromligning.dk/artikler/elpris-api for more info.
     To determine supplier and product IDs, visit https://stromligning.dk/live?netselskab=radius_c&produkt=vindstoed_danskvind&omraade=DK2

@@ -250,7 +250,7 @@ async def main():
     parser.add_argument("--easee_password", help="The Easee password to use", required=True, type=str)
     parser.add_argument("--webservice_port", help="The port to use for the webservice", default=5042, type=int)
     parser.add_argument("--max_average_price_default", help="The maximum average price per kWh in DKK to allow",
-                        default=1.6, type=float)
+                        default=0.65, type=float)
     args = parser.parse_args()
 
     # Connect to Easee charger and log in
