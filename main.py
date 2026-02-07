@@ -1,7 +1,62 @@
-"""
-Example code for integrating VehicleState with your application:
+import asyncio
+from typing import AsyncIterator, Tuple, Optional, List
+import datetime as dt
 
-In your application class, add this method:
+from pyeasee import Easee
+import argparse
+import teslapy
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+import pyeasee
+from pyeasee.charger import STATUS as CHARGER_STATUS, Charger
+
+from ladning.charging_plan import create_charging_plan
+from ladning.energy_prices import get_energy_prices
+from ladning.logging import log
+from ladning.types import ChargingPlan, Price, VehicleChargeState, ChargingRequest, ChargingRequestResponse, VehicleState
+from ladning.vehicle_query import get_vehicle_charge_state
+
+from ladning.webservice import LadningService
+
+# Charging states
+READY_TO_CHARGE = "READY_TO_CHARGE"
+CHARGING = "CHARGING"
+AWAITING_START = "AWAITING_START"
+COMPLETED = "COMPLETED"
+DISCONNECTED = "DISCONNECTED"
+
+
+class ApplicationState:
+    def __init__(self, easee: Easee, tesla: teslapy.Tesla, hourly_prices: List[Price],
+                 max_average_price_default: Optional[float]) -> None:
+        self._easee = easee
+        self._tesla = tesla
+        self._hourly_prices = hourly_prices
+        self._vehicle_charge_state: Optional[VehicleChargeState] = None
+        self._charging_plan: Optional[ChargingPlan] = None
+        self._charger: Optional[Charger] = None
+        self._event_loop = asyncio.get_running_loop()
+        self._default_charging_request: ChargingRequest = ChargingRequest(battery_target=100, ready_by=None,
+                                                                          max_average_price_dkk_kwh=max_average_price_default)
+        self._charging_request: ChargingRequest = self._default_charging_request
+        self._charging_state: Optional[str] = None
+
+    async def get_charger(self) -> Charger:
+        if self._charger is None:
+            # Find the one charger that we intend to control/listen to
+            chargers = await self._easee.get_chargers()
+            if len(chargers) != 1:
+                raise RuntimeError(f"Expected a single charger, got {len(chargers)}")
+            self._charger = chargers[0]
+        return self._charger
+
+    def get_hourly_prices(self) -> List[Price]:
+        return self._hourly_prices
+
+    def get_charging_plan(self) -> Optional[ChargingPlan]:
+        return self._charging_plan
 
     def get_vehicle_state(self) -> VehicleState:
         if self._vehicle_charge_state is None:
@@ -9,15 +64,260 @@ In your application class, add this method:
         else:
             return VehicleState(connected=True, charge_level=self._vehicle_charge_state.battery_level)
 
-When constructing the webservice after creating `state`:
+    async def smart_charge(self) -> None:
+        async for previous_state, new_state in listen_for_charging_states(self._easee, await self.get_charger()):
+            self._charging_state = new_state
 
-webservice = LadningService(host="0.0.0.0", port=args.webservice_port,
-                            electricity_price_getter=state.get_hourly_prices,
-                            charging_plan_getter=state.get_charging_plan,
-                            charging_request_setter=state.on_charging_request_sync,
-                            vehicle_state_getter=state.get_vehicle_state)
-"""
+            if new_state == DISCONNECTED:
+                # If vehicle was disconnected, cancel any existing charging plan
+                log.info("Vehicle disconnected - cancelling charging plan")
+                await self.cancel_charging()
+                self._vehicle_charge_state = None
+                continue
+            if new_state == COMPLETED:
+                # Car has signalled that it is at 100%, so complete charging and wait for car to be plugged in again
+                log.info("Charging completed")
+                self.complete_charging()
+                self._vehicle_charge_state = None
+                continue
+            if new_state == AWAITING_START and previous_state == CHARGING and self._charging_plan is not None:
+                # Planned charging to less than 100% may just have finished - check if times align to make sure
+                now = dt.datetime.now().astimezone()
+                if abs(now - self._charging_plan.end_time) < dt.timedelta(minutes=10):
+                    log.info(f"Charging to {self._charging_plan.battery_end} % "
+                             f"completed at {now} (expected {self._charging_plan.end_time})")
+
+                    # Reset charging request (e.g. to allow charging to 100 % with no deadline)
+                    # Then try to schedule charging again with the reset plan
+                    self.complete_charging()
+                    self._vehicle_charge_state = get_vehicle_charge_state(self._tesla, allow_wakeup=True)
+                    await self.plan_charging()
+
+            # If previous state was None (app just started) or disconnected, consider whether to perform planning
+            app_just_launched = previous_state is None
+            if app_just_launched or previous_state == DISCONNECTED:
+                # Plan if charger is ready to charge, awaiting a schedule or already started charging
+                perform_planning = new_state == READY_TO_CHARGE or \
+                                   new_state == AWAITING_START or \
+                                   new_state == CHARGING
+
+                if perform_planning:
+                    self._vehicle_charge_state = get_vehicle_charge_state(self._tesla, allow_wakeup=True)
+                    await self.plan_charging()
+
+            # If no charging plan exists (e.g. due to too high an average cost) prevent charging by pausing
+            if not app_just_launched and new_state == CHARGING and self._charging_plan is None:
+                log.info("Stopping charging to await better charging conditions")
+                await self._charger.pause()
+
+    async def plan_charging(self) -> ChargingRequestResponse:
+        if self._vehicle_charge_state is None:
+            log.info("Skipping planning due to no vehicle charge state information")
+            return ChargingRequestResponse(False, "Skipping planning due to no vehicle charge state information", None)
+
+        # Check if charging request is old and needs to be reset
+        if self._charging_request.ready_by is not None:
+            if self._charging_request.ready_by < dt.datetime.now().astimezone():
+                log.info("Resetting old charging request")
+                self._charging_request = self._default_charging_request
+
+        log.info(f"Planning charging from {self._vehicle_charge_state.battery_level}% with "
+                 f"request: {self._charging_request}")
+
+        result = create_charging_plan(self._vehicle_charge_state, self._hourly_prices, self._charging_request,
+                                      current_time=dt.datetime.now().astimezone())
+        if not result.success:
+            log.info(f"Charging plan unsuccessful: {result.reason}")
+            return result
+
+        new_charging_plan = result.plan
+        if new_charging_plan == self._charging_plan:
+            log.info("Charging plan unchanged")
+            return ChargingRequestResponse(False, "Charging plan unchanged", None)
+
+        # Put new charging plan into effect
+        await schedule_charge(await self.get_charger(), new_charging_plan)
+        log.info(f"New charging plan scheduled: {new_charging_plan}")
+        self._charging_plan = new_charging_plan
+        return result
+
+    async def cancel_charging(self) -> None:
+        """
+        Cancel any existing charging plan
+        """
+        charger = await self.get_charger()
+        previous_plan = await charger.get_basic_charge_plan()
+        if previous_plan is None:
+            log.info("No plan to cancel")
+        else:
+            await charger.delete_basic_charge_plan()
+            log.info("Charging plan cancelled")
+        self._charging_plan = None
+
+        # Reset charging request
+        log.info("Resetting charging request due to cancelled charging")
+        self._charging_request = self._default_charging_request
+
+    def complete_charging(self) -> None:
+        """
+        Mark the current charging plan as completed
+        Note: This will not cancel the plan
+        """
+        self._charging_plan = None
+        log.info("Resetting charging request due to completed charging")
+        self._charging_request = self._default_charging_request
+
+    async def on_new_hourly_prices(self, hourly_prices: List[Price]) -> None:
+        log.info("New hourly prices received")
+        if hourly_prices == self._hourly_prices:
+            log.info("New hourly prices were unchanged, skipping handling")
+            return
+
+        log.info(f"New hourly prices: {hourly_prices}")
+
+        # if vehicle is currently charging, get the SoC before attempting to re-plan charging
+        if self._charging_state == "CHARGING":
+            log.info("Vehicle is currently charging - getting revised state of charge before planning")
+            self._vehicle_charge_state = get_vehicle_charge_state(self._tesla, allow_wakeup=True)
+
+        log.info("Checking if charging plan should be revised")
+        self._hourly_prices = hourly_prices
+        await self.plan_charging()
+
+    async def on_charging_request(self, request: ChargingRequest) -> ChargingRequestResponse:
+        log.info(f"Received charging request: {request}")
+        if request.battery_target <= 0 or request.battery_target > 100:
+            return ChargingRequestResponse(False, "Target battery level outside valid range", plan=None)
+
+        self._charging_request = request
+        result = await self.plan_charging()
+
+        # On failure, revert to default charging request
+        if not result.success:
+            self._charging_request = self._default_charging_request
+        return result
+
+    def on_charging_request_sync(self, request: ChargingRequest) -> ChargingRequestResponse:
+        async def _call() -> ChargingRequestResponse:
+            return await self.on_charging_request(request)
+
+        future = asyncio.run_coroutine_threadsafe(_call(), self._event_loop)
+        return future.result()
+
+
+async def listen_for_charging_states(easee: Easee, charger: Charger) -> AsyncIterator[Tuple[Optional[str], str]]:
+    queue = asyncio.Queue()
+
+    # Query the current charger mode
+    current_charging_state: str = (await charger.get_state())["chargerOpMode"]
+    log.info(f"Initial charging state: {current_charging_state}")
+    yield None, current_charging_state
+
+    async def _signalr_callback(_, __, data_id, value):
+        if data_id == pyeasee.ChargerStreamData.state_chargerOpMode.value:
+            new_charging_state = CHARGER_STATUS[value]
+
+            nonlocal current_charging_state
+            if new_charging_state != current_charging_state:
+                log.info(f"New charging state: {new_charging_state}")
+                await queue.put((current_charging_state, new_charging_state))
+                current_charging_state = new_charging_state
+
+    await easee.sr_subscribe(charger, _signalr_callback)
+    while True:
+        yield await queue.get()
+
+
+async def schedule_charge(charger: Charger, charging_plan: ChargingPlan) -> None:
+    def _format(d: dt.datetime):
+        # Convert to UTC - required by Easee API
+        return d.astimezone(dt.timezone.utc).isoformat(timespec='milliseconds').replace("+00:00", "Z")
+
+    # In case that charging was paused previously, resume charging before setting the charge plan
+    await charger.resume()
+
+    # If charging to full, leave out end time to let car decide when it is exactly 100 %
+    # This helps account for differences between the modelled charging curve and the actual curve, e.g. due to battery
+    # temperature, etc.
+    charge_stop_time = None if charging_plan.battery_end == 100 else _format(charging_plan.end_time)
+    response = await charger.set_basic_charge_plan(id=42,  # Unsure what ID to use here
+                                                   chargeStartTime=_format(charging_plan.start_time),
+                                                   chargeStopTime=charge_stop_time,
+                                                   repeat=True,
+                                                   isEnabled=True)
+    if not response.ok:
+        raise RuntimeError(f"Scheduling charge failed: '{response.reason}' (code {response.status})")
+
+
+async def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--tesla_username", help="The Tesla username to use", required=True, type=str)
+    parser.add_argument("--easee_username", help="The Easee username to use", required=True, type=str)
+    parser.add_argument("--easee_password", help="The Easee password to use", required=True, type=str)
+    parser.add_argument("--webservice_port", help="The port to use for the webservice", default=5042, type=int)
+    parser.add_argument("--max_average_price_default", help="The maximum average price per kWh in DKK to allow",
+                        default=0.65, type=float)
+    args = parser.parse_args()
+
+    # Connect to Easee charger and log in
+    easee = Easee(args.easee_username, args.easee_password)
+
+    # Connect to Tesla API
+    tesla = teslapy.Tesla(args.tesla_username)
+
+    # Create application state to tie together different pieces of the app
+    state = ApplicationState(easee, tesla, get_energy_prices(), args.max_average_price_default)
+
+    # Start the webservice used to query and control charging on a worker thread
+    webservice = LadningService(host="0.0.0.0", port=args.webservice_port,
+                                electricity_price_getter=state.get_hourly_prices,
+                                charging_plan_getter=state.get_charging_plan,
+                                charging_request_setter=state.on_charging_request_sync,
+                                vehicle_state_getter=state.get_vehicle_state)
+    webservice.start()
+
+    # Create a scheduler that will query new energy prices every day at 13:00 local time
+    scheduler = AsyncIOScheduler()
+
+    async def _try_update_prices():
+        retry_minutes = 15
+        success = False
+        while not success:
+            try:
+                prices = get_energy_prices()
+
+                # Check if hourly prices are actually new (last new item should be dated later than last current item)
+                if prices[-1].start > state.get_hourly_prices()[-1].start:
+                    await state.on_new_hourly_prices(prices)
+                    success = True
+                else:
+                    log.error(f"Energy prices weren't new - retrying in {retry_minutes} minutes")
+                    await asyncio.sleep(retry_minutes * 60)
+            except Exception as e:
+                log.error(f"Error while loading new energy prices: '{e}' - retrying in {retry_minutes} minutes")
+                await asyncio.sleep(retry_minutes * 60)
+
+    # Use max_instances here in case the job is looping with retries due to API being down
+    scheduler.add_job(_try_update_prices, CronTrigger(hour=13, timezone=dt.datetime.now().astimezone().tzinfo),
+                      max_instances=1)
+    scheduler.start()
+
+    # Run the main smart charging loop
+    try:
+        await state.smart_charge()
+    except:
+        log.warning("Quitting due to keyboard interrupt or error")
+        raise
+    finally:
+        # Clean up
+        await easee.close()
+        tesla.close()
+        webservice.stop()
+        log.info("Web service shut down")
+
 
 if __name__ == "__main__":
-    print("This is an example file showing how to integrate VehicleState.")
-    print("See the docstring at the top of this file for usage examples.")
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
