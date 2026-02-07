@@ -89,7 +89,7 @@ class LadningService:
                     return Response("ready_by datetime must have timezone information")
 
             # Parse "max_average_price_dkk_kwh" field if applicable
-            max_average_price_dkk_wkh = (float(data["max_average_price_dkk_kwh"])
+            max_average_price_dkk_kwh = (float(data["max_average_price_dkk_kwh"])
                 if "max_average_price_dkk_kwh" in data else None)
 
             # Parse "charge_immediately" field, but default to False if not provided
@@ -99,7 +99,7 @@ class LadningService:
             battery_target = int(data.get("battery_target", 100))
             charging_request = ChargingRequest(battery_target=battery_target,
                                                ready_by=ready_by,
-                                               max_average_price_dkk_kwh=max_average_price_dkk_wkh,
+                                               max_average_price_dkk_kwh=max_average_price_dkk_kwh,
                                                charge_immediately=charge_immediately)
         except ValueError as e:
             return Response(f"Unable to parse request parameters: '{e}'", 400)
