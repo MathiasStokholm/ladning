@@ -89,8 +89,8 @@ class LadningService:
                     return Response("ready_by datetime must have timezone information")
 
             # Parse "max_average_price_dkk_kwh" field if applicable
-            max_average_price_dkk_wkh = float(data["max_average_price_dkk_kwh"])
-                if "max_average_price_dkk_kwh" in data else None
+            max_average_price_dkk_wkh = (float(data["max_average_price_dkk_kwh"])
+                if "max_average_price_dkk_kwh" in data else None)
 
             # Parse "charge_immediately" field, but default to False if not provided
             charge_immediately: bool = data.get("charge_immediately", False)
