@@ -5,7 +5,6 @@ import datetime as dt
 import pytest
 import requests
 
-from ladning.constants import PRICE_FRACTION_OF_HOUR
 from ladning.types import Price, ChargingPlan, ChargingRequest, ChargingRequestResponse, VehicleState
 from ladning.webservice import LadningService
 
@@ -15,14 +14,13 @@ HOST_ADDRESS = "127.0.0.1"  # This has to be an IPv4 address for webservice to n
 
 
 @pytest.fixture
- def price_getter() -> Callable[[], List[Price]]:
+def price_getter() -> Callable[[], List[Price]]:
     def fg() -> List[Price]:
         now = dt.datetime.now().astimezone()
         return [Price(start=now + dt.timedelta(hours=i), price_kwh_dkk=1.0 + i) for i in range(24)]
     return fg
 
 @pytest.fixture
-
 def charging_plan_getter() -> Callable[[], Optional[ChargingPlan]]:
     def fg() -> Optional[ChargingPlan]:
         return None
