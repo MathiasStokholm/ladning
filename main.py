@@ -235,15 +235,10 @@ async def schedule_charge(charger: Charger, charging_plan: ChargingPlan) -> None
     # temperature, etc.
     charge_stop_time = None if charging_plan.battery_end == 100 else _format(charging_plan.end_time)
 
-    # Don't repeat if charging should start immediately (start_time is now or in the past): using repeat=True with a
-    # past/present start time causes Easee to schedule charging for the same time the following day.
-    # Use a small buffer to account for execution delays between plan creation and this call.
-    repeat = charging_plan.start_time > dt.datetime.now().astimezone() + dt.timedelta(seconds=30)
-
     response = await charger.set_basic_charge_plan(id=42,  # Unsure what ID to use here
                                                    chargeStartTime=_format(charging_plan.start_time),
                                                    chargeStopTime=charge_stop_time,
-                                                   repeat=repeat,
+                                                   repeat=False,
                                                    isEnabled=True)
     if not response.ok:
         raise RuntimeError(f"Scheduling charge failed: '{response.reason}' (code {response.status})")
