@@ -230,12 +230,22 @@ async def schedule_charge(charger: Charger, charging_plan: ChargingPlan) -> None
     # In case that charging was paused previously, resume charging before setting the charge plan
     await charger.resume()
 
+    # If the start time is within 30 seconds of now, add a 30-second buffer so the start time is always in the
+    # future when submitted. This avoids repeat=True scheduling for the following day (which Easee does when the
+    # start time is in the past) while also keeping repeat=True, which avoids the Easee API 400 error that occurs
+    # when repeat=False is combined with a chargeStopTime.
+    buffer = dt.timedelta(seconds=30)
+    charge_start_time = charging_plan.start_time
+    if charge_start_time <= dt.datetime.now().astimezone() + buffer:
+        charge_start_time = dt.datetime.now().astimezone() + buffer
+
     # If charging to full, leave out end time to let car decide when it is exactly 100 %
     # This helps account for differences between the modelled charging curve and the actual curve, e.g. due to battery
     # temperature, etc.
     charge_stop_time = None if charging_plan.battery_end == 100 else _format(charging_plan.end_time)
+
     response = await charger.set_basic_charge_plan(id=42,  # Unsure what ID to use here
-                                                   chargeStartTime=_format(charging_plan.start_time),
+                                                   chargeStartTime=_format(charge_start_time),
                                                    chargeStopTime=charge_stop_time,
                                                    repeat=True,
                                                    isEnabled=True)
