@@ -230,15 +230,21 @@ async def schedule_charge(charger: Charger, charging_plan: ChargingPlan) -> None
     # In case that charging was paused previously, resume charging before setting the charge plan
     await charger.resume()
 
+    # Don't repeat if charging should start immediately (start_time is now or in the past): using repeat=True with a
+    # past/present start time causes Easee to schedule charging for the same time the following day.
+    # Use a small buffer to account for execution delays between plan creation and this call.
+    repeat = charging_plan.start_time > dt.datetime.now().astimezone() + dt.timedelta(seconds=30)
+
     # If charging to full, leave out end time to let car decide when it is exactly 100 %
     # This helps account for differences between the modelled charging curve and the actual curve, e.g. due to battery
     # temperature, etc.
-    charge_stop_time = None if charging_plan.battery_end == 100 else _format(charging_plan.end_time)
+    # Note: Easee rejects chargeStopTime on non-recurring (repeat=False) charge plans, so omit it in that case.
+    charge_stop_time = None if (charging_plan.battery_end == 100 or not repeat) else _format(charging_plan.end_time)
 
     response = await charger.set_basic_charge_plan(id=42,  # Unsure what ID to use here
                                                    chargeStartTime=_format(charging_plan.start_time),
                                                    chargeStopTime=charge_stop_time,
-                                                   repeat=False,
+                                                   repeat=repeat,
                                                    isEnabled=True)
     if not response.ok:
         raise RuntimeError(f"Scheduling charge failed: '{response.reason}' (code {response.status})")
