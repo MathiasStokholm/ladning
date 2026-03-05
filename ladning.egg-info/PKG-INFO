@@ -1,0 +1,55 @@
+Metadata-Version: 2.4
+Name: ladning
+Version: 0.1.0
+Summary: Automatic charging of Tesla via Easee
+Requires-Python: >=3.13
+Description-Content-Type: text/markdown
+License-File: LICENSE.md
+Requires-Dist: apscheduler==3.10.4
+Requires-Dist: flask==3.0.3
+Requires-Dist: flask-cors==4.0.1
+Requires-Dist: pyeasee==0.8.14
+Requires-Dist: teslapy==2.9.0
+Requires-Dist: waitress==3.0.0
+Dynamic: license-file
+
+# Ladning
+
+## Repo set up
+
+1. Ensure that you have `uv` installed (see https://docs.astral.sh/uv/getting-started/installation/):
+2. Install requirements:
+
+ ```bash
+ uv sync
+ ```
+
+## Authenticating with Tesla API (generating OAuth token)
+
+To generate the Tesla OAuth token, simply run the application (see below) on a PC with a browser available. A window
+will pop-up in the browser and request Tesla sign-in. Once completed, copy the generated URL from the Tesla window and
+paste it back into the input of `main.py` - then hit enter. The OAuth token will automatically be stored in `cache.json`
+in the root of the repository for automatic authentication in the future.
+
+If running headless (e.g. on a Raspberry-Pi), simply generate `cache.json` on a normal PC and copy it to the headless
+machine.
+
+## Running the application
+
+To run, call `main.py` with the required arguments:
+
+```shell
+uv run main.py --easee_username [EASEE_USERNAME] --easee_password [EASEE_PASSWORD] --tesla_username [TESLA_USERNAME]
+```
+
+## Running the tests
+
+To run tests, call:
+
+```shell
+uv run pytest
+```
+
+## Energy Price Provider
+
+Energy prices are queried via Strømligning. https://stromligning.dk

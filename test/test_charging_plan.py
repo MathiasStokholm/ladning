@@ -342,6 +342,37 @@ def test_create_charging_plan_less_than_one_hour() -> None:
     assert result.plan.start_time == hourly_prices[1].start
 
 
+def test_create_charging_plan_immediate_battery_at_target() -> None:
+    """
+    Test that charging plan creation with charge_immediately=True always attempts to start charging, even when
+    the battery is already at the target level (e.g. to allow another car to charge from the outlet)
+    """
+    vehicle_state = VehicleChargeState(battery_level=100)
+    now = dt.datetime.now().astimezone()
+    prices: List[Price] = [
+        Price(start=now + dt.timedelta(minutes=i * 15), price_kwh_dkk=1.0)
+        for i in range(8)
+    ]
+
+    # Without charge_immediately, charging plan should fail since battery is already at target
+    result = create_charging_plan(vehicle_state, prices,
+                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=None,
+                                                  charge_immediately=False), current_time=now)
+    assert not result.success
+
+    # With charge_immediately=True, charging plan should succeed even though battery is already at target
+    result = create_charging_plan(vehicle_state, prices,
+                                  ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=None,
+                                                  charge_immediately=True), current_time=now)
+    assert result.success
+    assert result.plan is not None
+    assert result.plan.start_time == now
+    assert result.plan.battery_start == 100
+    assert result.plan.battery_end == 100
+    assert result.plan.total_cost_dkk == 0.0
+    assert result.plan.range_added_km == 0.0
+
+
 def test_create_charging_plan_immediate() -> None:
     """
     Test that charging plan creation can create a plan that begins immediately, regardless of price
