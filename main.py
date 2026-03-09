@@ -102,7 +102,7 @@ class ApplicationState:
             # If no charging plan exists (e.g. due to too high an average cost) prevent charging by pausing
             if not app_just_launched and new_state == CHARGING and self._charging_plan is None:
                 log.info("Stopping charging to await better charging conditions")
-                await self._charger.pause()
+                await (await self.get_charger()).pause()
 
     async def plan_charging(self) -> ChargingRequestResponse:
         if self._vehicle_charge_state is None:
@@ -125,6 +125,9 @@ class ApplicationState:
             return result
 
         new_charging_plan = result.plan
+        if new_charging_plan is None:
+            log.info("No charging plan generated despite successful result - skipping scheduling")
+            return ChargingRequestResponse(False, "No charging plan generated despite successful result", None)
         if new_charging_plan == self._charging_plan:
             log.info("Charging plan unchanged")
             return ChargingRequestResponse(False, "Charging plan unchanged", None)

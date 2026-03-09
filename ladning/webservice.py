@@ -65,6 +65,8 @@ class LadningService:
         # Convert POST data to Python dataclass
         try:
             data = request.json
+            if data is None:
+                return Response("Request body must be valid JSON", 400)
 
             # Parse "ready_by" field if applicable
             ready_by = data.get("ready_by")
