@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Sequence
 import datetime as dt
 import math
 
@@ -8,7 +8,7 @@ from ladning.types import VehicleChargeState, Price, ChargingPlan, ChargingReque
     EnergyNeed
 
 
-def argmin(a: List[float]) -> int:
+def argmin(a: Sequence[float]) -> int:
     """
     Returns the index in the list with the minimum value. Returns -1 on an empty input list.
 
@@ -18,7 +18,7 @@ def argmin(a: List[float]) -> int:
     return min(range(len(a)), key=lambda x: a[x], default=-1)
 
 
-def convolve_valid(signal1: List[float], signal2: List[float]) -> List[float]:
+def convolve_valid(signal1: Sequence[float], signal2: Sequence[float]) -> List[float]:
     """
     Convolves two signals and returns the valid portion
 
