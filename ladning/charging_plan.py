@@ -152,6 +152,14 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, prices: List[
                          charging_request: ChargingRequest, current_time: dt.datetime) -> ChargingRequestResponse:
     # Check if charging is needed at all
     if not vehicle_charge_state.battery_level < charging_request.battery_target:
+        # If charging immediately, always attempt to start (e.g. to allow another car to charge from the outlet)
+        if charging_request.charge_immediately:
+            return ChargingRequestResponse(success=True, reason="",
+                                           plan=ChargingPlan(start_time=current_time, end_time=current_time,
+                                                             battery_start=vehicle_charge_state.battery_level,
+                                                             battery_end=vehicle_charge_state.battery_level,
+                                                             total_cost_dkk=0.0,
+                                                             range_added_km=0.0))
         return ChargingRequestResponse(False, reason="Vehicle battery level already at or above target", plan=None)
 
     if len(prices) == 0:
