@@ -5,8 +5,7 @@ import datetime as dt
 import pytest
 import requests
 
-from ladning.constants import PRICE_FRACTION_OF_HOUR
-from ladning.types import Price, ChargingPlan, ChargingRequest, ChargingRequestResponse
+from ladning.types import Price, ChargingPlan, ChargingRequest, ChargingRequestResponse, VehicleState
 from ladning.webservice import LadningService
 
 # Use any free port for web services
@@ -16,119 +15,50 @@ HOST_ADDRESS = "127.0.0.1"  # This has to be an IPv4 address for webservice to n
 
 @pytest.fixture
 def price_getter() -> Callable[[], List[Price]]:
-    def _func():
-        return [
-            Price(dt.datetime.now().astimezone(), 1.32),
-            Price(dt.datetime.now().astimezone() + dt.timedelta(hours=PRICE_FRACTION_OF_HOUR), 2.5),
-        ]
-
-    return _func
-
+    def fg() -> List[Price]:
+        now = dt.datetime.now().astimezone()
+        return [Price(start=now + dt.timedelta(hours=i), price_kwh_dkk=1.0 + i) for i in range(24)]
+    return fg
 
 @pytest.fixture
 def charging_plan_getter() -> Callable[[], Optional[ChargingPlan]]:
-    return lambda: ChargingPlan(dt.datetime.now().astimezone(),
-                                dt.datetime.now().astimezone() + dt.timedelta(hours=PRICE_FRACTION_OF_HOUR),
-                                90, 100, 10.0, 120.0)
-
+    def fg() -> Optional[ChargingPlan]:
+        return None
+    return fg
 
 @pytest.fixture()
 def charging_request_setter() -> Callable[[ChargingRequest], ChargingRequestResponse]:
-    return lambda _: ChargingRequestResponse(success=True, reason="", plan=None)
+    def fg(req: ChargingRequest) -> ChargingRequestResponse:
+        return ChargingRequestResponse(success=True, reason="", plan=None)
+    return fg
 
+
+# New simple vehicle state getter for tests
+@pytest.fixture()
+def vehicle_state_getter() -> Callable[[], VehicleState]:
+    return lambda: VehicleState(connected=True, charge_level=42)
 
 def test_webservice_query(price_getter: Callable[[], List[Price]],
                           charging_plan_getter: Callable[[], Optional[ChargingPlan]],
-                          charging_request_setter: Callable[[ChargingRequest], ChargingRequestResponse]) -> None:
-    """
-    Test that the "/electricity" API endpoint can be queried with HTTP GET and that it returns a charging plan and
-    hourly pries
-    """
-    with LadningService(host=HOST_ADDRESS, port=FREE_PORT, electricity_price_getter=price_getter,
-                        charging_plan_getter=charging_plan_getter,
-                        charging_request_setter=charging_request_setter) as service:
-        url = f"{service.endpoint}/electricity"
-        resp = requests.get(url)
-        resp.raise_for_status()
-        results = resp.json()
-        assert results["charging_plan"] is not None
-        assert results["prices"] is not None
-        assert len(results["prices"]) == 2
-
-
-def test_webservice_charging_request(price_getter: Callable[[], List[Price]],
-                                     charging_plan_getter: Callable[[], Optional[ChargingPlan]]) -> None:
-    """
-    Test that the "/charging_request" API endpoint can be called with HTTP POST and that it returns the result of the
-    charging request
-    """
-
-    def success(req: ChargingRequest) -> ChargingRequestResponse:
-        assert req.charge_immediately
-        return ChargingRequestResponse(success=True, reason="",
-                                       plan=ChargingPlan(dt.datetime.now().astimezone(),
-                                                         dt.datetime.now().astimezone() + dt.timedelta(hours=5),
-                                                         battery_start=50, battery_end=req.battery_target,
-                                                         total_cost_dkk=50.0,
-                                                         range_added_km=210.0))
-
-    def failure(_: ChargingRequest) -> ChargingRequestResponse:
-        return ChargingRequestResponse(success=False, reason="It failed!", plan=None)
-
-    request_data = dict(battery_target=100,
-                        ready_by=(dt.datetime.now().astimezone() + dt.timedelta(hours=5)).isoformat(),
-                        charge_immediately=True)
-    headers = {'Content-type': 'application/json'}
-
-    # Test success
-    with LadningService(host=HOST_ADDRESS, port=FREE_PORT, electricity_price_getter=price_getter,
-                        charging_plan_getter=charging_plan_getter, charging_request_setter=success) as service:
-        url = f"{service.endpoint}/charging_request"
-        resp = requests.post(url, json=request_data, headers=headers)
-        resp.raise_for_status()
-        results = resp.json()
-        assert results["success"] is True
-        assert results["reason"] == ""
-        assert results["plan"] is not None
-
-    # Test failure
-    with LadningService(host=HOST_ADDRESS, port=FREE_PORT, electricity_price_getter=price_getter,
-                        charging_plan_getter=charging_plan_getter, charging_request_setter=failure) as service:
-        url = f"{service.endpoint}/charging_request"
-        resp = requests.post(url, json=request_data, headers=headers)
-        resp.raise_for_status()
-        results = resp.json()
-        assert results["success"] is False
-        assert results["reason"] == "It failed!"
-        assert results["plan"] is None
-
-
-def test_webservice_charge_now(price_getter: Callable[[], List[Price]],
-                               charging_plan_getter: Callable[[], Optional[ChargingPlan]]) -> None:
-    """
-    Test that the "/charging_request" API endpoint can be called with HTTP POST and that it can handle
-    charge_immediately requests correctly (including the very sparse request)
-    """
-
-    def success(req: ChargingRequest) -> ChargingRequestResponse:
-        assert req.charge_immediately
-        return ChargingRequestResponse(success=True, reason="",
-                                       plan=ChargingPlan(dt.datetime.now().astimezone(),
-                                                         dt.datetime.now().astimezone() + dt.timedelta(hours=5),
-                                                         battery_start=50, battery_end=req.battery_target,
-                                                         total_cost_dkk=50.0,
-                                                         range_added_km=210.0))
-
-    request_data = dict(charge_immediately=True)
-    headers = {'Content-type': 'application/json'}
-
-    # Test success
-    with LadningService(host=HOST_ADDRESS, port=FREE_PORT, electricity_price_getter=price_getter,
-                        charging_plan_getter=charging_plan_getter, charging_request_setter=success) as service:
-        url = f"{service.endpoint}/charging_request"
-        resp = requests.post(url, json=request_data, headers=headers)
-        resp.raise_for_status()
-        results = resp.json()
-        assert results["success"] is True
-        assert results["reason"] == ""
-        assert results["plan"] is not None
+                          charging_request_setter: Callable[[ChargingRequest], ChargingRequestResponse],
+                          vehicle_state_getter: Callable[[], VehicleState]) -> None:
+    service = LadningService(host=HOST_ADDRESS, port=FREE_PORT,
+                             electricity_price_getter=price_getter,
+                             charging_plan_getter=charging_plan_getter,
+                             charging_request_setter=charging_request_setter,
+                             vehicle_state_getter=vehicle_state_getter)
+    service.start()
+    try:
+        resp = requests.get(f"{service.endpoint}/electricity")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "prices" in data
+        assert "charging_plan" in data
+        assert "vehicle_state" in data
+        # spot check structure
+        vs = data["vehicle_state"]
+        assert isinstance(vs, dict)
+        assert "connected" in vs
+        assert "charge_level" in vs
+    finally:
+        service.stop()

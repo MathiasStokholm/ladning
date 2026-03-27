@@ -7,17 +7,20 @@ import waitress
 from flask_cors import CORS
 
 from ladning.logging import log
-from ladning.types import Price, ChargingPlan, ChargingRequest, ChargingRequestResponse
+from ladning.types import Price, ChargingPlan, ChargingRequest, ChargingRequestResponse, VehicleState
 from dataclasses import asdict
 
 
 class LadningService:
     def __init__(self, host: str, port: int, electricity_price_getter: Callable[[], List[Price]],
                  charging_plan_getter: Callable[[], Optional[ChargingPlan]],
-                 charging_request_setter: Callable[[ChargingRequest], ChargingRequestResponse]) -> None:
+                 charging_request_setter: Callable[[ChargingRequest], ChargingRequestResponse],
+                 vehicle_state_getter: Callable[[], Optional[VehicleState]]) -> None:
         self._electricity_price_getter = electricity_price_getter
         self._charging_plan_getter = charging_plan_getter
         self._charging_request_setter = charging_request_setter
+        # New getter for nested vehicle state
+        self._vehicle_state_getter = vehicle_state_getter
 
         # Create Flask application
         self._service = Flask("ladning")
@@ -51,13 +54,25 @@ class LadningService:
 
     def electricity(self) -> Response:
         """
-        API endpoint to query electricity prices and current charging schedule
+        API endpoint to query electricity prices, current charging schedule and vehicle state
         """
         prices = self._electricity_price_getter()
         charging_plan = self._charging_plan_getter()
+
+        vehicle_state = None
+        try:
+            vs = self._vehicle_state_getter()
+            # vs is a VehicleState instance or None; convert to dict
+            vehicle_state = asdict(vs) if vs is not None else None
+        except Exception:
+            # Do not fail the entire endpoint if vehicle getter raises; just log and return safe defaults
+            log.exception("Failed to read vehicle state for API response")
+            vehicle_state = None
+
         combined = dict(
             charging_plan=None if charging_plan is None else asdict(charging_plan),
-            prices=[asdict(p) for p in prices]
+            prices=[asdict(p) for p in prices],
+            vehicle_state=vehicle_state
         )
         return jsonify(combined)
 
@@ -76,8 +91,9 @@ class LadningService:
                     return Response("ready_by datetime must have timezone information")
 
             # Parse "max_average_price_dkk_kwh" field if applicable
-            max_average_price_dkk_kwh = float(data["max_average_price_dkk_kwh"]) \
-                if "max_average_price_dkk_kwh" in data else None
+            max_average_price_dkk_kwh_value = data.get("max_average_price_dkk_kwh")
+            max_average_price_dkk_kwh = (float(max_average_price_dkk_kwh_value)
+                if max_average_price_dkk_kwh_value is not None else None)
 
             # Parse "charge_immediately" field, but default to False if not provided
             charge_immediately: bool = data.get("charge_immediately", False)

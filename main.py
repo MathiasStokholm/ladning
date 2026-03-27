@@ -15,7 +15,7 @@ from pyeasee.charger import STATUS as CHARGER_STATUS, Charger
 from ladning.charging_plan import create_charging_plan
 from ladning.energy_prices import get_energy_prices
 from ladning.logging import log
-from ladning.types import ChargingPlan, Price, VehicleChargeState, ChargingRequest, ChargingRequestResponse
+from ladning.types import ChargingPlan, Price, VehicleChargeState, ChargingRequest, ChargingRequestResponse, VehicleState
 from ladning.vehicle_query import get_vehicle_charge_state
 
 from ladning.webservice import LadningService
@@ -57,6 +57,12 @@ class ApplicationState:
 
     def get_charging_plan(self) -> Optional[ChargingPlan]:
         return self._charging_plan
+
+    def get_vehicle_state(self) -> VehicleState:
+        if self._vehicle_charge_state is None:
+            return VehicleState(connected=False, charge_level=None)
+        else:
+            return VehicleState(connected=True, charge_level=self._vehicle_charge_state.battery_level)
 
     async def smart_charge(self) -> None:
         async for previous_state, new_state in listen_for_charging_states(self._easee, await self.get_charger()):
@@ -279,7 +285,8 @@ async def main():
     webservice = LadningService(host="0.0.0.0", port=args.webservice_port,
                                 electricity_price_getter=state.get_hourly_prices,
                                 charging_plan_getter=state.get_charging_plan,
-                                charging_request_setter=state.on_charging_request_sync)
+                                charging_request_setter=state.on_charging_request_sync,
+                                vehicle_state_getter=state.get_vehicle_state)
     webservice.start()
 
     # Create a scheduler that will query new energy prices every day at 13:00 local time
