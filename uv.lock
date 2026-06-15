@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.13"
 
 [[package]]
@@ -266,15 +266,9 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "apscheduler" },
-    { name = "flask" },
-    { name = "flask-cors" },
-    { name = "pyeasee" },
     { name = "pytest" },
     { name = "ruff" },
-    { name = "teslapy" },
     { name = "ty" },
-    { name = "waitress" },
 ]
 
 [package.metadata]
@@ -283,21 +277,15 @@ requires-dist = [
     { name = "flask", specifier = "==3.0.3" },
     { name = "flask-cors", specifier = "==4.0.1" },
     { name = "pyeasee", specifier = "==0.8.14" },
-    { name = "teslapy", specifier = "==2.9.0" },
+    { name = "teslapy", specifier = "==2.9.2" },
     { name = "waitress", specifier = "==3.0.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "apscheduler", specifier = "==3.10.4" },
-    { name = "flask", specifier = "==3.0.3" },
-    { name = "flask-cors", specifier = "==4.0.1" },
-    { name = "pyeasee" },
     { name = "pytest", specifier = "==8.3.2" },
     { name = "ruff", specifier = ">=0.12.5" },
-    { name = "teslapy", specifier = "==2.9.0" },
     { name = "ty", specifier = ">=0.0.21" },
-    { name = "waitress", specifier = "==3.0.0" },
 ]
 
 [[package]]
@@ -609,16 +597,16 @@ wheels = [
 
 [[package]]
 name = "teslapy"
-version = "2.9.0"
+version = "2.9.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "requests" },
     { name = "requests-oauthlib" },
     { name = "websocket-client" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/df/1f/16a075b35440d3f093da9d50fc905d68023830adbb97f37393f489a4d841/TeslaPy-2.9.0.tar.gz", hash = "sha256:f24ee5f1a60afbb0cdce8649788265f6602d6a0cd51aa7d6c933d52f3bfc5757", size = 66000, upload-time = "2024-01-28T11:31:42.871Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7a/b0/5e44243a8e67971acb89fc1a8c4b16b126c3d55c3e69286d1ab50c20323c/teslapy-2.9.2.tar.gz", hash = "sha256:07961c170762e5565d780fb3e15485d4482dccd87ba0c7b9e34066fc1bb115cc", size = 67307, upload-time = "2026-06-15T19:29:03.915Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3c/ce/db68a46f2059afa92e15c708bd4633b0386355c10028e8835fa6f2a0d66d/TeslaPy-2.9.0-py2.py3-none-any.whl", hash = "sha256:5132598d8937f65f4178a84f15cdad3896fb6747223372c7a0ee324293ba9bd9", size = 43591, upload-time = "2024-01-28T11:31:40.822Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/e3/59b582fe889b22344fa70eb0e287ac0cc827c3875d5e8d60a257060033e3/teslapy-2.9.2-py2.py3-none-any.whl", hash = "sha256:8d347affbff08dfb01ecb2613c5cbac3233d288263fbcb40dab5927c72b44ad9", size = 44952, upload-time = "2026-06-15T19:28:59.046Z" },
 ]
 
 [[package]]

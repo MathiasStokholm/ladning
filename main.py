@@ -283,9 +283,6 @@ async def main():
 
     # Connect to Tesla API
     tesla = teslapy.Tesla(args.tesla_username)
-    tesla.mount(
-        "https://", TLSv13Adapter(max_retries=tesla.get_adapter("https://").max_retries)
-    )
 
     # Create application state to tie together different pieces of the app
     state = ApplicationState(easee, tesla, get_energy_prices(), args.max_average_price_default)
