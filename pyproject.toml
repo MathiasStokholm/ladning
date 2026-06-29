@@ -19,3 +19,6 @@ dev = [
     "ruff>=0.12.5",
     "ty>=0.0.21",
 ]
+
+[tool.uv.sources]
+teslapy = { git = "https://github.com/Bliph/TeslaPy.git", tag = "http2-transport" }
