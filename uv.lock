@@ -362,7 +362,7 @@ requires-dist = [
     { name = "flask", specifier = "==3.0.3" },
     { name = "flask-cors", specifier = "==4.0.1" },
     { name = "pyeasee", specifier = "==0.8.14" },
-    { name = "teslapy", git = "https://github.com/Bliph/TeslaPy.git?tag=http2-transport" },
+    { name = "teslapy", git = "https://github.com/tdorssers/TeslaPy.git?tag=8380fb77152f48cb084671c436dc5816f68873f7" },
     { name = "waitress", specifier = "==3.0.0" },
 ]
 
@@ -683,7 +683,7 @@ wheels = [
 [[package]]
 name = "teslapy"
 version = "2.9.2"
-source = { git = "https://github.com/Bliph/TeslaPy.git?tag=http2-transport#3ec34d1d4a186d9c5d95aa6e9f0090e7da7c5743" }
+source = { git = "https://github.com/tdorssers/TeslaPy.git?tag=8380fb77152f48cb084671c436dc5816f68873f7#8380fb77152f48cb084671c436dc5816f68873f7" }
 dependencies = [
     { name = "httpx", extra = ["http2"] },
     { name = "requests" },

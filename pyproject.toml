@@ -21,4 +21,4 @@ dev = [
 ]
 
 [tool.uv.sources]
-teslapy = { git = "https://github.com/Bliph/TeslaPy.git", tag = "http2-transport" }
+teslapy = { git = "https://github.com/tdorssers/TeslaPy.git", tag = "8380fb77152f48cb084671c436dc5816f68873f7" }
