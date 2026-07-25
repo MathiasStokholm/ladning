@@ -272,7 +272,6 @@ async def main():
 
     # Connect to Tesla API
     tesla = teslapy.Tesla(args.tesla_username)
-    print(get_vehicle_charge_state(tesla, allow_wakeup=True))
 
     # Create application state to tie together different pieces of the app
     state = ApplicationState(easee, tesla, get_energy_prices(), args.max_average_price_default)
