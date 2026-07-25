@@ -257,17 +257,6 @@ async def schedule_charge(charger: Charger, charging_plan: ChargingPlan) -> None
         raise RuntimeError(f"Scheduling charge failed: '{response.reason}' (code {response.status})")
 
 
-from requests.adapters import HTTPAdapter
-import ssl
-
-class TLSv13Adapter(HTTPAdapter):
-    def init_poolmanager(self, *args, **kwargs):
-        ctx = ssl.create_default_context()
-        ctx.minimum_version = ssl.TLSVersion.TLSv1_3
-        kwargs['ssl_context'] = ctx
-        return super().init_poolmanager(*args, **kwargs)
-
-
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--tesla_username", help="The Tesla username to use", required=True, type=str)
@@ -283,6 +272,7 @@ async def main():
 
     # Connect to Tesla API
     tesla = teslapy.Tesla(args.tesla_username)
+    print(get_vehicle_charge_state(tesla, allow_wakeup=True))
 
     # Create application state to tie together different pieces of the app
     state = ApplicationState(easee, tesla, get_energy_prices(), args.max_average_price_default)
