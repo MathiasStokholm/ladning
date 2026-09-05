@@ -2,6 +2,7 @@ import asyncio
 from typing import AsyncIterator, Tuple, Optional, List
 import datetime as dt
 
+import requests
 from pyeasee import Easee
 import argparse
 import teslapy

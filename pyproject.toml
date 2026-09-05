@@ -3,26 +3,22 @@ name = "ladning"
 version = "0.1.0"
 description = "Automatic charging of Tesla via Easee"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 dependencies = [
     "apscheduler==3.10.4",
     "flask==3.0.3",
     "flask-cors==4.0.1",
     "pyeasee==0.8.14",
-    "teslapy==2.9.0",
+    "teslapy==2.9.2",
     "waitress==3.0.0",
 ]
 
 [dependency-groups]
 dev = [
-    "apscheduler==3.10.4",
-    "flask==3.0.3",
-    "flask-cors==4.0.1",
-    "pyeasee",
     "pytest==8.3.2",
     "ruff>=0.12.5",
-    "teslapy==2.9.0",
     "ty>=0.0.21",
-    "waitress==3.0.0",
 ]
 
+[tool.uv.sources]
+teslapy = { git = "https://github.com/tdorssers/TeslaPy.git", tag = "8380fb77152f48cb084671c436dc5816f68873f7" }
