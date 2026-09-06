@@ -30,6 +30,7 @@ CHARGER_OP_MODE_OBSERVATION_ID = 109
 
 
 def _charging_state_from_observations(observations: Mapping[str, Any]) -> str:
+    """Return the charger status represented by the operation-mode observation."""
     for observation in observations.get("observations", []):
         if observation.get("id") == CHARGER_OP_MODE_OBSERVATION_ID:
             try:
