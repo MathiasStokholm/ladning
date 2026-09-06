@@ -11,6 +11,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 import pyeasee
 from pyeasee.charger import STATUS as CHARGER_STATUS, Charger
+from pyeasee.exceptions import BadRequestException
 
 from ladning.charging_plan import create_charging_plan
 from ladning.energy_prices import get_energy_prices
@@ -241,13 +242,23 @@ async def listen_for_charging_states(easee: Easee, charger: Charger) -> AsyncIte
         yield await queue.get()
 
 
+async def _resume_charger(charger: Charger) -> None:
+    """Resume a paused charger, ignoring the transient disconnected plug-in state."""
+    try:
+        await charger.resume()
+    except BadRequestException as error:
+        if not isinstance(error.message, Mapping) or error.message.get("errorCodeName") != "ChargerDisconnected":
+            raise
+        log.info("Charger was disconnected while resuming; continuing with charge plan")
+
+
 async def schedule_charge(charger: Charger, charging_plan: ChargingPlan) -> None:
     def _format(d: dt.datetime):
         # Convert to UTC - required by Easee API
         return d.astimezone(dt.timezone.utc).isoformat(timespec='milliseconds').replace("+00:00", "Z")
 
     # In case that charging was paused previously, resume charging before setting the charge plan
-    await charger.resume()
+    await _resume_charger(charger)
 
     # If the start time is within 30 seconds of now, add a 30-second buffer so the start time is always in the
     # future when submitted. This avoids repeat=True scheduling for the following day (which Easee does when the
