@@ -1,8 +1,7 @@
 import asyncio
-from typing import AsyncIterator, Tuple, Optional, List
+from typing import Any, AsyncIterator, Mapping, Tuple, Optional, List
 import datetime as dt
 
-import requests
 from pyeasee import Easee
 import argparse
 import teslapy
@@ -27,6 +26,18 @@ CHARGING = "CHARGING"
 AWAITING_START = "AWAITING_START"
 COMPLETED = "COMPLETED"
 DISCONNECTED = "DISCONNECTED"
+CHARGER_OP_MODE_OBSERVATION_ID = 109
+
+
+def _charging_state_from_observations(observations: Mapping[str, Any]) -> str:
+    for observation in observations.get("observations", []):
+        if observation.get("id") == CHARGER_OP_MODE_OBSERVATION_ID:
+            try:
+                return CHARGER_STATUS[observation["value"]]
+            except KeyError as error:
+                raise RuntimeError(f"Unknown charger operation mode: {observation.get('value')}") from error
+
+    raise RuntimeError(f"Charger operation mode observation {CHARGER_OP_MODE_OBSERVATION_ID} was not returned")
 
 
 class ApplicationState:
@@ -206,8 +217,11 @@ class ApplicationState:
 async def listen_for_charging_states(easee: Easee, charger: Charger) -> AsyncIterator[Tuple[Optional[str], str]]:
     queue = asyncio.Queue()
 
-    # Query the current charger mode
-    current_charging_state: str = (await charger.get_state())["chargerOpMode"]
+    # Query the current charger mode from the observation replacing the deprecated state endpoint.
+    observations = await charger.get_observations(CHARGER_OP_MODE_OBSERVATION_ID)
+    if observations is None:
+        raise RuntimeError("Could not retrieve charger operation mode observation")
+    current_charging_state = _charging_state_from_observations(observations)
     log.info(f"Initial charging state: {current_charging_state}")
     yield None, current_charging_state
 
