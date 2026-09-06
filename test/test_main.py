@@ -72,7 +72,14 @@ def test_schedule_charge_sets_plan_before_resuming() -> None:
         async def resume(self) -> None:
             self.actions.append("resume")
 
-        async def set_basic_charge_plan(self, **_: object) -> Response:
+        async def set_basic_charge_plan(
+            self,
+            id: int,
+            chargeStartTime: str,
+            chargeStopTime: str | None,
+            repeat: bool,
+            isEnabled: bool,
+        ) -> Response:
             self.actions.append("set_plan")
             return Response()
 

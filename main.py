@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, AsyncIterator, Mapping, Tuple, Optional, List
+from typing import Any, AsyncIterator, Mapping, Protocol, Tuple, Optional, List
 import datetime as dt
 
 from pyeasee import Easee
@@ -218,6 +218,23 @@ class ApplicationState:
         return future.result()
 
 
+class _ResumableCharger(Protocol):
+    async def resume(self) -> Any:
+        ...
+
+
+class _ChargePlanCharger(_ResumableCharger, Protocol):
+    async def set_basic_charge_plan(
+        self,
+        id: int,
+        chargeStartTime: str,
+        chargeStopTime: Optional[str],
+        repeat: bool,
+        isEnabled: bool,
+    ) -> Any:
+        ...
+
+
 async def listen_for_charging_states(easee: Easee, charger: Charger) -> AsyncIterator[Tuple[Optional[str], str]]:
     queue = asyncio.Queue()
 
@@ -244,7 +261,7 @@ async def listen_for_charging_states(easee: Easee, charger: Charger) -> AsyncIte
         yield await queue.get()
 
 
-async def _resume_charger(charger: Charger) -> None:
+async def _resume_charger(charger: _ResumableCharger) -> None:
     """Resume a charger, retrying transient disconnected responses."""
     for attempt in range(RESUME_RETRY_ATTEMPTS):
         try:
@@ -261,7 +278,7 @@ async def _resume_charger(charger: Charger) -> None:
             await asyncio.sleep(RESUME_RETRY_DELAY.total_seconds())
 
 
-async def schedule_charge(charger: Charger, charging_plan: ChargingPlan) -> None:
+async def schedule_charge(charger: _ChargePlanCharger, charging_plan: ChargingPlan) -> None:
     def _format(d: dt.datetime):
         # Convert to UTC - required by Easee API
         return d.astimezone(dt.timezone.utc).isoformat(timespec='milliseconds').replace("+00:00", "Z")
