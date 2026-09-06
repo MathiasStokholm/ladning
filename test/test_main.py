@@ -34,9 +34,6 @@ def test_resume_charger_retries_after_disconnected_charger(monkeypatch: pytest.M
             if self.resume_attempts == 1:
                 raise BadRequestException({"errorCodeName": "ChargerDisconnected"})
 
-        async def get_observations(self, _: int) -> dict[str, list[dict[str, int]]]:
-            return {"observations": [{"id": 109, "value": 6}]}
-
     async def no_sleep(_: float) -> None:
         pass
 
@@ -53,9 +50,6 @@ def test_resume_charger_stops_after_unplugging(monkeypatch: pytest.MonkeyPatch) 
     class DisconnectedCharger:
         async def resume(self) -> None:
             raise BadRequestException({"errorCodeName": "ChargerDisconnected"})
-
-        async def get_observations(self, _: int) -> dict[str, list[dict[str, int]]]:
-            return {"observations": [{"id": 109, "value": 1}]}
 
     async def no_sleep(_: float) -> None:
         pass

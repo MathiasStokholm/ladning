@@ -30,13 +30,6 @@ DISCONNECTED = "DISCONNECTED"
 CHARGER_OP_MODE_OBSERVATION_ID = 109
 RESUME_RETRY_ATTEMPTS = 6
 RESUME_RETRY_DELAY = dt.timedelta(seconds=5)
-CONNECTED_CHARGER_STATES = {
-    AWAITING_START,
-    CHARGING,
-    COMPLETED,
-    READY_TO_CHARGE,
-    "AWAITING_AUTHORIZATION",
-}
 
 
 def _charging_state_from_observations(observations: Mapping[str, Any]) -> str:
@@ -252,36 +245,20 @@ async def listen_for_charging_states(easee: Easee, charger: Charger) -> AsyncIte
 
 
 async def _resume_charger(charger: Charger) -> None:
-    """Resume a charger after confirming that a car is connected."""
-    try:
-        await charger.resume()
-        return
-    except BadRequestException as error:
-        if not isinstance(error.message, Mapping) or error.message.get("errorCodeName") != "ChargerDisconnected":
-            raise
+    """Resume a charger, retrying transient disconnected responses."""
+    for attempt in range(RESUME_RETRY_ATTEMPTS):
+        try:
+            await charger.resume()
+            return
+        except BadRequestException as error:
+            if not isinstance(error.message, Mapping) or error.message.get("errorCodeName") != "ChargerDisconnected":
+                raise
 
-    for attempt in range(RESUME_RETRY_ATTEMPTS - 1):
-        observations = await charger.get_observations(CHARGER_OP_MODE_OBSERVATION_ID)
-        if observations is None:
-            log.info("Could not retrieve charger state while waiting to resume charging")
-        else:
-            charging_state = _charging_state_from_observations(observations)
-            if charging_state in CONNECTED_CHARGER_STATES:
-                log.info(f"Charger is connected ({charging_state}); retrying resume")
-                try:
-                    await charger.resume()
-                    return
-                except BadRequestException as error:
-                    if (not isinstance(error.message, Mapping)
-                            or error.message.get("errorCodeName") != "ChargerDisconnected"):
-                        raise
-            else:
-                log.info(f"Charger is {charging_state}; waiting before retrying resume")
+            if attempt + 1 == RESUME_RETRY_ATTEMPTS:
+                raise RuntimeError("Could not resume charging because the charger remained disconnected") from error
 
-        if attempt + 1 < RESUME_RETRY_ATTEMPTS - 1:
+            log.info("Charger was disconnected while resuming; retrying")
             await asyncio.sleep(RESUME_RETRY_DELAY.total_seconds())
-
-    raise RuntimeError("Could not resume charging because the charger remained disconnected")
 
 
 async def schedule_charge(charger: Charger, charging_plan: ChargingPlan) -> None:
