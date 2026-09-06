@@ -1,8 +1,7 @@
 import asyncio
-from typing import AsyncIterator, Tuple, Optional, List
+from typing import Any, AsyncIterator, Mapping, Tuple, Optional, List
 import datetime as dt
 
-import requests
 from pyeasee import Easee
 import argparse
 import teslapy
@@ -12,6 +11,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 import pyeasee
 from pyeasee.charger import STATUS as CHARGER_STATUS, Charger
+from pyeasee.exceptions import BadRequestException
 
 from ladning.charging_plan import create_charging_plan
 from ladning.energy_prices import get_energy_prices
@@ -27,6 +27,21 @@ CHARGING = "CHARGING"
 AWAITING_START = "AWAITING_START"
 COMPLETED = "COMPLETED"
 DISCONNECTED = "DISCONNECTED"
+CHARGER_OP_MODE_OBSERVATION_ID = 109
+RESUME_RETRY_ATTEMPTS = 6
+RESUME_RETRY_DELAY = dt.timedelta(seconds=5)
+
+
+def _charging_state_from_observations(observations: Mapping[str, Any]) -> str:
+    """Return the charger status represented by the operation-mode observation."""
+    for observation in observations.get("observations", []):
+        if observation.get("id") == CHARGER_OP_MODE_OBSERVATION_ID:
+            try:
+                return CHARGER_STATUS[observation["value"]]
+            except KeyError as error:
+                raise RuntimeError(f"Unknown charger operation mode: {observation.get('value')}") from error
+
+    raise RuntimeError(f"Charger operation mode observation {CHARGER_OP_MODE_OBSERVATION_ID} was not returned")
 
 
 class ApplicationState:
@@ -206,8 +221,11 @@ class ApplicationState:
 async def listen_for_charging_states(easee: Easee, charger: Charger) -> AsyncIterator[Tuple[Optional[str], str]]:
     queue = asyncio.Queue()
 
-    # Query the current charger mode
-    current_charging_state: str = (await charger.get_state())["chargerOpMode"]
+    # Query the current charger mode from the observation replacing the deprecated state endpoint.
+    observations = await charger.get_observations(CHARGER_OP_MODE_OBSERVATION_ID)
+    if observations is None:
+        raise RuntimeError("Could not retrieve charger operation mode observation")
+    current_charging_state = _charging_state_from_observations(observations)
     log.info(f"Initial charging state: {current_charging_state}")
     yield None, current_charging_state
 
@@ -226,13 +244,27 @@ async def listen_for_charging_states(easee: Easee, charger: Charger) -> AsyncIte
         yield await queue.get()
 
 
+async def _resume_charger(charger: Charger) -> None:
+    """Resume a charger, retrying transient disconnected responses."""
+    for attempt in range(RESUME_RETRY_ATTEMPTS):
+        try:
+            await charger.resume()
+            return
+        except BadRequestException as error:
+            if not isinstance(error.message, Mapping) or error.message.get("errorCodeName") != "ChargerDisconnected":
+                raise
+
+            if attempt + 1 == RESUME_RETRY_ATTEMPTS:
+                raise RuntimeError("Could not resume charging because the charger remained disconnected") from error
+
+            log.info("Charger was disconnected while resuming; retrying")
+            await asyncio.sleep(RESUME_RETRY_DELAY.total_seconds())
+
+
 async def schedule_charge(charger: Charger, charging_plan: ChargingPlan) -> None:
     def _format(d: dt.datetime):
         # Convert to UTC - required by Easee API
         return d.astimezone(dt.timezone.utc).isoformat(timespec='milliseconds').replace("+00:00", "Z")
-
-    # In case that charging was paused previously, resume charging before setting the charge plan
-    await charger.resume()
 
     # If the start time is within 30 seconds of now, add a 30-second buffer so the start time is always in the
     # future when submitted. This avoids repeat=True scheduling for the following day (which Easee does when the
@@ -255,6 +287,10 @@ async def schedule_charge(charger: Charger, charging_plan: ChargingPlan) -> None
                                                    isEnabled=True)
     if not response.ok:
         raise RuntimeError(f"Scheduling charge failed: '{response.reason}' (code {response.status})")
+
+    # A previous pause leaves the dynamic charger current at zero until resumed. Resume after the plan is stored so
+    # a transient disconnected state during plug-in does not prevent the plan from being created.
+    await _resume_charger(charger)
 
 
 async def main():
