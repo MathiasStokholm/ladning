@@ -24,30 +24,65 @@ def test_charging_state_from_observations_rejects_unknown_mode() -> None:
         _charging_state_from_observations({"observations": [{"id": 109, "value": 999}]})
 
 
-def test_resume_charger_ignores_disconnected_charger() -> None:
+def test_resume_charger_retries_after_disconnected_charger(monkeypatch: pytest.MonkeyPatch) -> None:
+    class DisconnectedCharger:
+        def __init__(self) -> None:
+            self.resume_attempts = 0
+
+        async def resume(self) -> None:
+            self.resume_attempts += 1
+            if self.resume_attempts == 1:
+                raise BadRequestException({"errorCodeName": "ChargerDisconnected"})
+
+        async def get_observations(self, _: int) -> dict[str, list[dict[str, int]]]:
+            return {"observations": [{"id": 109, "value": 6}]}
+
+    async def no_sleep(_: float) -> None:
+        pass
+
+    monkeypatch.setattr("main.RESUME_RETRY_ATTEMPTS", 2)
+    monkeypatch.setattr("main.asyncio.sleep", no_sleep)
+    charger = DisconnectedCharger()
+
+    asyncio.run(_resume_charger(charger))
+
+    assert charger.resume_attempts == 2
+
+
+def test_resume_charger_stops_after_unplugging(monkeypatch: pytest.MonkeyPatch) -> None:
     class DisconnectedCharger:
         async def resume(self) -> None:
             raise BadRequestException({"errorCodeName": "ChargerDisconnected"})
 
-    asyncio.run(_resume_charger(DisconnectedCharger()))
+        async def get_observations(self, _: int) -> dict[str, list[dict[str, int]]]:
+            return {"observations": [{"id": 109, "value": 1}]}
+
+    async def no_sleep(_: float) -> None:
+        pass
+
+    monkeypatch.setattr("main.RESUME_RETRY_ATTEMPTS", 2)
+    monkeypatch.setattr("main.asyncio.sleep", no_sleep)
+
+    with pytest.raises(RuntimeError, match="remained disconnected"):
+        asyncio.run(_resume_charger(DisconnectedCharger()))
 
 
-def test_schedule_charge_continues_when_charger_is_disconnected_during_resume() -> None:
+def test_schedule_charge_sets_plan_before_resuming() -> None:
     class Response:
         ok = True
 
-    class DisconnectedCharger:
+    class Charger:
         def __init__(self) -> None:
-            self.plan_set = False
+            self.actions: list[str] = []
 
         async def resume(self) -> None:
-            raise BadRequestException({"errorCodeName": "ChargerDisconnected"})
+            self.actions.append("resume")
 
         async def set_basic_charge_plan(self, **_: object) -> Response:
-            self.plan_set = True
+            self.actions.append("set_plan")
             return Response()
 
-    charger = DisconnectedCharger()
+    charger = Charger()
     plan = ChargingPlan(
         start_time=dt.datetime.now().astimezone() + dt.timedelta(minutes=10),
         end_time=dt.datetime.now().astimezone() + dt.timedelta(hours=1),
@@ -59,4 +94,4 @@ def test_schedule_charge_continues_when_charger_is_disconnected_during_resume() 
 
     asyncio.run(schedule_charge(charger, plan))
 
-    assert charger.plan_set
+    assert charger.actions == ["set_plan", "resume"]
