@@ -1,8 +1,10 @@
 import asyncio
 import datetime as dt
+from typing import cast
 
 import pytest
 from pyeasee.exceptions import BadRequestException
+from pyeasee.charger import Charger
 
 from main import _charging_state_from_observations, _resume_charger, schedule_charge
 from ladning.types import ChargingPlan
@@ -41,7 +43,7 @@ def test_resume_charger_retries_after_disconnected_charger(monkeypatch: pytest.M
     monkeypatch.setattr("main.asyncio.sleep", no_sleep)
     charger = DisconnectedCharger()
 
-    asyncio.run(_resume_charger(charger))
+    asyncio.run(_resume_charger(cast(Charger, charger)))
 
     assert charger.resume_attempts == 2
 
@@ -58,14 +60,14 @@ def test_resume_charger_stops_after_unplugging(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr("main.asyncio.sleep", no_sleep)
 
     with pytest.raises(RuntimeError, match="remained disconnected"):
-        asyncio.run(_resume_charger(DisconnectedCharger()))
+        asyncio.run(_resume_charger(cast(Charger, DisconnectedCharger())))
 
 
 def test_schedule_charge_sets_plan_before_resuming() -> None:
     class Response:
         ok = True
 
-    class Charger:
+    class FakeCharger:
         def __init__(self) -> None:
             self.actions: list[str] = []
 
@@ -83,7 +85,7 @@ def test_schedule_charge_sets_plan_before_resuming() -> None:
             self.actions.append("set_plan")
             return Response()
 
-    charger = Charger()
+    charger = FakeCharger()
     plan = ChargingPlan(
         start_time=dt.datetime.now().astimezone() + dt.timedelta(minutes=10),
         end_time=dt.datetime.now().astimezone() + dt.timedelta(hours=1),
@@ -93,6 +95,6 @@ def test_schedule_charge_sets_plan_before_resuming() -> None:
         range_added_km=10.0,
     )
 
-    asyncio.run(schedule_charge(charger, plan))
+    asyncio.run(schedule_charge(cast(Charger, charger), plan))
 
     assert charger.actions == ["set_plan", "resume"]
