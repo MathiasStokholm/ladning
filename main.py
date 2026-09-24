@@ -25,6 +25,7 @@ from ladning.webservice import LadningService
 READY_TO_CHARGE = "READY_TO_CHARGE"
 CHARGING = "CHARGING"
 AWAITING_START = "AWAITING_START"
+AWAITING_AUTHORIZATION = "AWAITING_AUTHORIZATION"
 COMPLETED = "COMPLETED"
 DISCONNECTED = "DISCONNECTED"
 CHARGER_OP_MODE_OBSERVATION_ID = 109
@@ -103,15 +104,18 @@ class ApplicationState:
                     self._vehicle_charge_state = get_vehicle_charge_state(self._tesla, allow_wakeup=True)
                     await self.plan_charging()
 
-            # If previous state was None (app just started) or disconnected, consider whether to perform planning
+            # If previous state indicates a fresh connection/authorization/start sequence,
+            # consider whether to perform planning (with guard against duplicate planning)
             app_just_launched = previous_state is None
-            if app_just_launched or previous_state == DISCONNECTED:
+            fresh_connection_states = (DISCONNECTED, AWAITING_AUTHORIZATION, AWAITING_START)
+            if (app_just_launched or previous_state in fresh_connection_states):
                 # Plan if charger is ready to charge, awaiting a schedule or already started charging
                 perform_planning = new_state == READY_TO_CHARGE or \
                                    new_state == AWAITING_START or \
                                    new_state == CHARGING
 
-                if perform_planning:
+                # Guard against duplicate planning when state transitions rapidly
+                if perform_planning and (self._vehicle_charge_state is None or self._charging_plan is None):
                     self._vehicle_charge_state = get_vehicle_charge_state(self._tesla, allow_wakeup=True)
                     await self.plan_charging()
 
