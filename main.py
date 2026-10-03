@@ -16,7 +16,7 @@ from pyeasee.exceptions import BadRequestException
 from ladning.charging_plan import create_charging_plan
 from ladning.energy_prices import get_energy_prices
 from ladning.logging import log
-from ladning.types import ChargingPlan, Price, VehicleChargeState, ChargingRequest, ChargingRequestResponse
+from ladning.types import ChargingPlan, Price, VehicleChargeState, VehicleStatus, ChargingRequest, ChargingRequestResponse
 from ladning.vehicle_query import get_vehicle_charge_state
 
 from ladning.webservice import LadningService
@@ -25,6 +25,7 @@ from ladning.webservice import LadningService
 READY_TO_CHARGE = "READY_TO_CHARGE"
 CHARGING = "CHARGING"
 AWAITING_START = "AWAITING_START"
+AWAITING_AUTHORIZATION = "AWAITING_AUTHORIZATION"
 COMPLETED = "COMPLETED"
 DISCONNECTED = "DISCONNECTED"
 CHARGER_OP_MODE_OBSERVATION_ID = 109
@@ -74,6 +75,12 @@ class ApplicationState:
     def get_charging_plan(self) -> Optional[ChargingPlan]:
         return self._charging_plan
 
+    def get_vehicle_status(self) -> VehicleStatus:
+        return VehicleStatus(
+            connected=self._charging_state not in (None, DISCONNECTED),
+            battery_level=None if self._vehicle_charge_state is None else self._vehicle_charge_state.battery_level,
+        )
+
     async def smart_charge(self) -> None:
         async for previous_state, new_state in listen_for_charging_states(self._easee, await self.get_charger()):
             self._charging_state = new_state
@@ -88,7 +95,8 @@ class ApplicationState:
                 # Car has signalled that it is at 100%, so complete charging and wait for car to be plugged in again
                 log.info("Charging completed")
                 self.complete_charging()
-                self._vehicle_charge_state = None
+                self._vehicle_charge_state = get_vehicle_charge_state(self._tesla, allow_wakeup=True)
+                log.info(f"Vehicle charge state after completion: {self._vehicle_charge_state.battery_level}%")
                 continue
             if new_state == AWAITING_START and previous_state == CHARGING and self._charging_plan is not None:
                 # Planned charging to less than 100% may just have finished - check if times align to make sure
@@ -103,15 +111,18 @@ class ApplicationState:
                     self._vehicle_charge_state = get_vehicle_charge_state(self._tesla, allow_wakeup=True)
                     await self.plan_charging()
 
-            # If previous state was None (app just started) or disconnected, consider whether to perform planning
+            # If previous state indicates a fresh connection/authorization/start sequence,
+            # consider whether to perform planning (with guard against duplicate planning)
             app_just_launched = previous_state is None
-            if app_just_launched or previous_state == DISCONNECTED:
+            fresh_connection_states = (DISCONNECTED, AWAITING_AUTHORIZATION, AWAITING_START)
+            if (app_just_launched or previous_state in fresh_connection_states):
                 # Plan if charger is ready to charge, awaiting a schedule or already started charging
                 perform_planning = new_state == READY_TO_CHARGE or \
                                    new_state == AWAITING_START or \
                                    new_state == CHARGING
 
-                if perform_planning:
+                # Guard against duplicate planning when state transitions rapidly
+                if perform_planning and (self._vehicle_charge_state is None or self._charging_plan is None):
                     self._vehicle_charge_state = get_vehicle_charge_state(self._tesla, allow_wakeup=True)
                     await self.plan_charging()
 
@@ -316,7 +327,8 @@ async def main():
     webservice = LadningService(host="0.0.0.0", port=args.webservice_port,
                                 electricity_price_getter=state.get_hourly_prices,
                                 charging_plan_getter=state.get_charging_plan,
-                                charging_request_setter=state.on_charging_request_sync)
+                                charging_request_setter=state.on_charging_request_sync,
+                                vehicle_charge_state_getter=state.get_vehicle_status)
     webservice.start()
 
     # Create a scheduler that will query new energy prices every day at 13:00 local time

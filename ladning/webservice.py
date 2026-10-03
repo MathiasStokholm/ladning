@@ -7,17 +7,19 @@ import waitress
 from flask_cors import CORS
 
 from ladning.logging import log
-from ladning.types import Price, ChargingPlan, ChargingRequest, ChargingRequestResponse
+from ladning.types import Price, ChargingPlan, ChargingRequest, ChargingRequestResponse, VehicleStatus
 from dataclasses import asdict
 
 
 class LadningService:
     def __init__(self, host: str, port: int, electricity_price_getter: Callable[[], List[Price]],
                  charging_plan_getter: Callable[[], Optional[ChargingPlan]],
-                 charging_request_setter: Callable[[ChargingRequest], ChargingRequestResponse]) -> None:
+                 charging_request_setter: Callable[[ChargingRequest], ChargingRequestResponse],
+                 vehicle_charge_state_getter: Optional[Callable[[], VehicleStatus]] = None) -> None:
         self._electricity_price_getter = electricity_price_getter
         self._charging_plan_getter = charging_plan_getter
         self._charging_request_setter = charging_request_setter
+        self._vehicle_charge_state_getter = vehicle_charge_state_getter
 
         # Create Flask application
         self._service = Flask("ladning")
@@ -55,9 +57,12 @@ class LadningService:
         """
         prices = self._electricity_price_getter()
         charging_plan = self._charging_plan_getter()
+        vehicle_status = self._vehicle_charge_state_getter() if self._vehicle_charge_state_getter else VehicleStatus(False, None)
         combined = dict(
             charging_plan=None if charging_plan is None else asdict(charging_plan),
-            prices=[asdict(p) for p in prices]
+            prices=[asdict(p) for p in prices],
+            car_connected=vehicle_status.connected,
+            battery_level=vehicle_status.battery_level,
         )
         return jsonify(combined)
 
