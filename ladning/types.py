@@ -9,6 +9,13 @@ class VehicleChargeState:
 
 
 @dataclasses.dataclass
+class VehicleStatus:
+    connected: bool
+    battery_level: Optional[int]
+
+
+
+@dataclasses.dataclass
 class Price:
     start: dt.datetime
     price_kwh_dkk: float

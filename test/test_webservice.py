@@ -6,7 +6,7 @@ import pytest
 import requests
 
 from ladning.constants import PRICE_FRACTION_OF_HOUR
-from ladning.types import Price, ChargingPlan, ChargingRequest, ChargingRequestResponse
+from ladning.types import Price, ChargingPlan, ChargingRequest, ChargingRequestResponse, VehicleStatus
 from ladning.webservice import LadningService
 
 # Use any free port for web services
@@ -37,16 +37,23 @@ def charging_request_setter() -> Callable[[ChargingRequest], ChargingRequestResp
     return lambda _: ChargingRequestResponse(success=True, reason="", plan=None)
 
 
+@pytest.fixture()
+def vehicle_charge_state_getter() -> Callable[[], VehicleStatus]:
+    return lambda: VehicleStatus(connected=True, battery_level=73)
+
+
 def test_webservice_query(price_getter: Callable[[], List[Price]],
                           charging_plan_getter: Callable[[], Optional[ChargingPlan]],
-                          charging_request_setter: Callable[[ChargingRequest], ChargingRequestResponse]) -> None:
+                          charging_request_setter: Callable[[ChargingRequest], ChargingRequestResponse],
+                          vehicle_charge_state_getter: Callable[[], VehicleStatus]) -> None:
     """
     Test that the "/electricity" API endpoint can be queried with HTTP GET and that it returns a charging plan and
     hourly pries
     """
     with LadningService(host=HOST_ADDRESS, port=FREE_PORT, electricity_price_getter=price_getter,
                         charging_plan_getter=charging_plan_getter,
-                        charging_request_setter=charging_request_setter) as service:
+                        charging_request_setter=charging_request_setter,
+                        vehicle_charge_state_getter=vehicle_charge_state_getter) as service:
         url = f"{service.endpoint}/electricity"
         resp = requests.get(url)
         resp.raise_for_status()
@@ -54,10 +61,13 @@ def test_webservice_query(price_getter: Callable[[], List[Price]],
         assert results["charging_plan"] is not None
         assert results["prices"] is not None
         assert len(results["prices"]) == 2
+        assert results["car_connected"] is True
+        assert results["battery_level"] == 73
 
 
 def test_webservice_charging_request(price_getter: Callable[[], List[Price]],
-                                     charging_plan_getter: Callable[[], Optional[ChargingPlan]]) -> None:
+                                     charging_plan_getter: Callable[[], Optional[ChargingPlan]],
+                                     vehicle_charge_state_getter: Callable[[], VehicleStatus]) -> None:
     """
     Test that the "/charging_request" API endpoint can be called with HTTP POST and that it returns the result of the
     charging request
@@ -104,7 +114,8 @@ def test_webservice_charging_request(price_getter: Callable[[], List[Price]],
 
 
 def test_webservice_charge_now(price_getter: Callable[[], List[Price]],
-                               charging_plan_getter: Callable[[], Optional[ChargingPlan]]) -> None:
+                               charging_plan_getter: Callable[[], Optional[ChargingPlan]],
+                               vehicle_charge_state_getter: Callable[[], VehicleStatus]) -> None:
     """
     Test that the "/charging_request" API endpoint can be called with HTTP POST and that it can handle
     charge_immediately requests correctly (including the very sparse request)
