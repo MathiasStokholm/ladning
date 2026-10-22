@@ -163,39 +163,52 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, prices: List[
         return ChargingRequestResponse(False, reason="Vehicle battery level already at or above target", plan=None)
     energy_need = maybe_energy_need
 
-    # Determine valid hourly prices
-    prices_valid = []
+    # Determine valid consecutive blocks of non-forecast prices
+    price_blocks: List[List[Price]] = []
+    current_block: List[Price] = []
     for p in prices:
+        if p.forecasted:
+            if current_block:
+                price_blocks.append(current_block)
+                current_block = []
+            continue
+
         # Disregard hours fully in the past (ongoing quarter-hour is valid) ...
         valid = p.start >= current_time - SAMPLING_PERIOD
         # ... and disregard hourly prices later than the charging request's end time if applicable ...
         if charging_request.ready_by is not None:
             valid &= p.start + SAMPLING_PERIOD <= charging_request.ready_by
-        if valid:
-            prices_valid.append(p)
+        if not valid:
+            continue
+
+        if current_block and p.start != current_block[-1].start + SAMPLING_PERIOD:
+            price_blocks.append(current_block)
+            current_block = []
+        current_block.append(p)
+    if current_block:
+        price_blocks.append(current_block)
 
     # Check if a sufficient amount of quarter-hours exists for the ready by time to be honored
-    if len(prices_valid) < math.ceil(energy_need.quarter_hours_required):
+    required_quarter_hours = math.ceil(energy_need.quarter_hours_required)
+    eligible_blocks = [block for block in price_blocks if len(block) >= required_quarter_hours]
+    if not eligible_blocks:
         return ChargingRequestResponse(False, reason="Not enough time to charge to the requested level", plan=None)
-
-    # If the first quarter-hour has already begun, clamp it to the current time to correctly estimate end of charging
-    if prices_valid[0].start < current_time:
-        fraction_shift = (current_time - prices_valid[0].start) / SAMPLING_PERIOD
-        prices_valid[0].start = current_time
-        energy_need = shift_fractional(energy_need, fraction_shift)
 
     # Estimate the added range in km
     range_added = estimate_added_range(vehicle_charge_state.battery_level, charging_request.battery_target)
 
-    # Pick cheapest consecutive hours for charging
-    # This yields the total price for starting at time N and finishing the required M hours later
-    # Note that the array is shorter than the input array by M due to not being able to sum past the end of the array
-    final_prices = [p.price_kwh_dkk for p in prices_valid]
-    full_hour_total_prices = convolve_valid(final_prices, energy_need.energy_signal)
-
     # If requested to charge immediately, simply pick hour 0 as the starting point and compute the rest from there
     if charging_request.charge_immediately:
-        immediate_price = full_hour_total_prices[0]
+        prices_valid = price_blocks[0]
+        if len(prices_valid) < required_quarter_hours:
+            return ChargingRequestResponse(False, reason="Not enough time to charge to the requested level", plan=None)
+        if prices_valid[0].start < current_time:
+            fraction_shift = (current_time - prices_valid[0].start) / SAMPLING_PERIOD
+            prices_valid[0].start = current_time
+            energy_need = shift_fractional(energy_need, fraction_shift)
+        immediate_price = convolve_valid(
+            [p.price_kwh_dkk for p in prices_valid], energy_need.energy_signal
+        )[0]
         start_time = prices_valid[0].start
         end_time = start_time + SAMPLING_PERIOD * energy_need.quarter_hours_required
         return ChargingRequestResponse(success=True, reason="",
@@ -206,22 +219,45 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, prices: List[
                                                          range_added_km=range_added
                                                          ))
 
+    # If the first quarter-hour has already begun, clamp it to the current time to correctly estimate end of charging
+    if price_blocks and price_blocks[0][0].start < current_time:
+        fraction_shift = (current_time - price_blocks[0][0].start) / SAMPLING_PERIOD
+        price_blocks[0][0].start = current_time
+        shifted_energy_need = shift_fractional(energy_need, fraction_shift)
+        first_block_shifted = True
+    else:
+        shifted_energy_need = energy_need
+        first_block_shifted = False
+
+    # Calculate possible costs only within consecutive blocks of actual prices
+    candidate_plans = []
+    for block in eligible_blocks:
+        block_energy_need = shifted_energy_need if block is price_blocks[0] and first_block_shifted else energy_need
+        totals = convolve_valid([p.price_kwh_dkk for p in block], block_energy_need.energy_signal)
+        candidate_plans.extend(
+            (block[index].start, total, block_energy_need)
+            for index, total in enumerate(totals)
+        )
+
+    if not candidate_plans:
+        return ChargingRequestResponse(False, reason="Not enough time to charge to the requested level", plan=None)
+
     # Check if price is lower than requested limit on average
     if charging_request.max_average_price_dkk_kwh is not None:
-        total_cost = min(full_hour_total_prices)
-        average_cost_per_kwh = total_cost / sum(energy_need.energy_signal)
+        total_cost = min(candidate[1] for candidate in candidate_plans)
+        lowest_cost_plan = next(candidate for candidate in candidate_plans if candidate[1] == total_cost)
+        average_cost_per_kwh = total_cost / sum(lowest_cost_plan[2].energy_signal)
         if average_cost_per_kwh > charging_request.max_average_price_dkk_kwh:
             return ChargingRequestResponse(success=False,
                                            reason=f"Average cost per kwh ({average_cost_per_kwh} DKK/kWh) was higher than requested limit: {charging_request.max_average_price_dkk_kwh} DKK/kWh",
                                            plan=None)
 
-    start_idx = argmin(full_hour_total_prices)
-    start_time = prices_valid[start_idx].start
-    end_time = start_time + SAMPLING_PERIOD * energy_need.quarter_hours_required
+    start_time, total_cost, selected_energy_need = min(candidate_plans, key=lambda candidate: candidate[1])
+    end_time = start_time + SAMPLING_PERIOD * selected_energy_need.quarter_hours_required
     return ChargingRequestResponse(success=True, reason="",
                                    plan=ChargingPlan(start_time=start_time, end_time=end_time,
                                                      battery_start=vehicle_charge_state.battery_level,
                                                      battery_end=charging_request.battery_target,
-                                                     total_cost_dkk=min(full_hour_total_prices),
+                                                     total_cost_dkk=total_cost,
                                                      range_added_km=range_added
                                                      ))
