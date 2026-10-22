@@ -164,8 +164,8 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, prices: List[
     energy_need = maybe_energy_need
 
     # Determine valid consecutive blocks of non-forecast prices
-    price_blocks: List[List[Price]] = []
-    current_block: List[Price] = []
+    price_blocks: list[list[Price]] = []
+    current_block: list[Price] = []
     for p in prices:
         if p.forecasted:
             if current_block:
@@ -204,7 +204,10 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, prices: List[
             return ChargingRequestResponse(False, reason="Not enough time to charge to the requested level", plan=None)
         if prices_valid[0].start < current_time:
             fraction_shift = (current_time - prices_valid[0].start) / SAMPLING_PERIOD
-            prices_valid[0].start = current_time
+            prices_valid[0] = Price(
+                start=current_time,
+                price_kwh_dkk=prices_valid[0].price_kwh_dkk,
+            )
             energy_need = shift_fractional(energy_need, fraction_shift)
         immediate_price = convolve_valid(
             [p.price_kwh_dkk for p in prices_valid], energy_need.energy_signal
@@ -222,7 +225,10 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, prices: List[
     # If the first quarter-hour has already begun, clamp it to the current time to correctly estimate end of charging
     if price_blocks and price_blocks[0][0].start < current_time:
         fraction_shift = (current_time - price_blocks[0][0].start) / SAMPLING_PERIOD
-        price_blocks[0][0].start = current_time
+        price_blocks[0][0] = Price(
+            start=current_time,
+            price_kwh_dkk=price_blocks[0][0].price_kwh_dkk,
+        )
         shifted_energy_need = shift_fractional(energy_need, fraction_shift)
         first_block_shifted = True
     else:
