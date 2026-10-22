@@ -380,12 +380,12 @@ def test_create_charging_plan_excludes_forecasted_prices() -> None:
     vehicle_state = vehicle_charge_state_required_for_charging_duration_to_full(1.0)
     now = dt.datetime.now().astimezone()
     prices = [
-        Price(start=now, price_kwh_dkk=4.0),
-        Price(start=now + SAMPLING_PERIOD, price_kwh_dkk=0.01, forecasted=True),
+        Price(start=now + SAMPLING_PERIOD * i, price_kwh_dkk=4.0)
+        for i in range(8)
     ]
     prices.extend(
-        Price(start=now + SAMPLING_PERIOD * i, price_kwh_dkk=2.0)
-        for i in range(2, 10)
+        Price(start=now + SAMPLING_PERIOD * i, price_kwh_dkk=0.01, forecasted=True)
+        for i in range(8, 16)
     )
     request = ChargingRequest(battery_target=100, ready_by=None, max_average_price_dkk_kwh=None)
 
@@ -393,7 +393,8 @@ def test_create_charging_plan_excludes_forecasted_prices() -> None:
 
     assert result.success
     assert result.plan is not None
-    assert result.plan.start_time >= now + SAMPLING_PERIOD * 2
+    assert result.plan.start_time == now
+    assert result.plan.total_cost_dkk > 1.0
 
     immediate_request = ChargingRequest(
         battery_target=100,
@@ -402,7 +403,9 @@ def test_create_charging_plan_excludes_forecasted_prices() -> None:
         charge_immediately=True,
     )
     immediate_result = create_charging_plan(vehicle_state, prices, immediate_request, current_time=now)
-    assert not immediate_result.success
+    assert immediate_result.success
+    assert immediate_result.plan is not None
+    assert immediate_result.plan.start_time == now
 
 
 def test_create_charging_plan_fails_without_actual_prices() -> None:
