@@ -157,6 +157,11 @@ def create_charging_plan(vehicle_charge_state: VehicleChargeState, prices: List[
     if len(prices) == 0:
         raise RuntimeError("Empty list of quarter hourly prices, cannot create charging plan")
 
+    # Strømligning returns all actual prices before any forecasted prices.
+    prices = [price for price in prices if not price.forecasted]
+    if len(prices) == 0:
+        return ChargingRequestResponse(False, reason="Not enough time to charge to the requested level", plan=None)
+
     # Charging is needed - calculate plan
     maybe_energy_need = calculate_energy_need(vehicle_charge_state.battery_level, charging_request.battery_target)
     if maybe_energy_need is None:

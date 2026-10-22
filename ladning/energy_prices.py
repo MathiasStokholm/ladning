@@ -15,20 +15,28 @@ def get_energy_prices(supplier_id: str = "radius_c", product_id: str = "vindstoe
 
     :param supplier_id: String representing the energy supplier, see link above
     :param product_id: String representing the energy product, see link above
-    :return: The hourly energy prices from now until the most recently published price
+    :return: The hourly energy prices from now onward, including forecast prices
     """
     endpoint = "https://stromligning.dk/api/prices"
     now = ((dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=PRICE_FRACTION_OF_HOUR))
            .isoformat().replace("+00:00", "Z"))
 
     # Setting 'lean' to True means we only get the basic information needed (hour and total price)
-    url = f"{endpoint}?from={now}&productId={product_id}&supplierId={supplier_id}&lean=true"
-    records = requests.get(url).json()
+    url = (
+        f"{endpoint}?from={now}&productId={product_id}&supplierId={supplier_id}"
+        "&lean=true&forecast=true"
+    )
+    response = requests.get(url).json()
+    records = response.get("prices", response) if isinstance(response, dict) else response
 
     def _convert(record: Dict[str, Any]) -> Price:
         start = dt.datetime.fromisoformat(record["date"].replace("Z", "+00:00")).astimezone()
         price_kwh_dkk = float(record["price"])
-        return Price(start=start, price_kwh_dkk=price_kwh_dkk)
+        return Price(
+            start=start,
+            price_kwh_dkk=price_kwh_dkk,
+            forecasted=record.get("forecast", False),
+        )
 
     # Sort hourly prices by datetime (first entry is closest to current time)
     hourly_prices = sorted([_convert(r) for r in records], key=lambda p: p.start)
