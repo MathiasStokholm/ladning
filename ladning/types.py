@@ -19,6 +19,7 @@ class VehicleStatus:
 class Price:
     start: dt.datetime
     price_kwh_dkk: float
+    forecasted: bool = False
 
 
 @dataclasses.dataclass
